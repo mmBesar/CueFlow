@@ -1,0 +1,189 @@
+name: CueFlow CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cueflow-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: Core tests (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure core-only build (no Qt required)
+        run: >-
+          cmake -S . -B build-core -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCUEFLOW_BUILD_APP=OFF
+          -DBUILD_TESTING=ON
+
+      - name: Build core tests
+        run: cmake --build build-core --parallel 2
+
+      - name: Run core tests
+        run: ctest --test-dir build-core --output-on-failure
+
+      - name: Run standalone test script
+        run: ./scripts/test-scroll-model.sh
+
+  riscv64-core:
+    name: Core tests (riscv64 cross-build + QEMU)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install RISC-V cross compiler and emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y g++-riscv64-linux-gnu qemu-user
+
+      - name: Compile RISC-V test binary
+        run: >-
+          riscv64-linux-gnu-g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror
+          -static tests/scroll_model_test.cpp -o scroll_model_test-riscv64
+
+      - name: Run RISC-V test binary under QEMU
+        run: qemu-riscv64 ./scroll_model_test-riscv64
+
+  linux-app-build:
+    name: Qt application build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            qt-host: linux
+            qt-arch: gcc_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qt-host: linux_arm64
+            qt-arch: linux_gcc_arm64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: ${{ matrix.qt-host }}
+          target: desktop
+          arch: ${{ matrix.qt-arch }}
+          install-deps: true
+          cache: true
+
+      - name: Configure application and tests
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCUEFLOW_BUILD_APP=ON
+          -DBUILD_TESTING=ON
+
+      - name: Build application and tests
+        run: cmake --build build --parallel 2
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Stage Qt application bundle
+        run: |
+          rm -rf stage
+          cmake --install build --prefix "$PWD/stage"
+          tar -czf "cueflow-linux-${{ matrix.arch }}.tar.gz" -C stage .
+
+      - name: Upload Linux test bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cueflow-linux-${{ matrix.arch }}
+          path: cueflow-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  android-apk:
+    name: Android APK (arm64-v8a)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK packages
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install Qt for Android
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: all_os
+          target: android
+          arch: android_arm64_v8a
+          install-deps: true
+          cache: true
+
+      - name: Configure Android app
+        run: |
+          "$QT_ROOT_DIR/bin/qt-cmake" \
+            -S . -B build-android -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DQT_ANDROID_PACKAGE_NAME=org.mmbesar.cueflow \
+            -DQT_ANDROID_TARGET_SDK_VERSION=36 \
+            -DQT_ANDROID_MIN_SDK_VERSION=28 \
+            -DQT_ANDROID_ABIS=arm64-v8a
+
+      - name: Build APK
+        run: cmake --build build-android --target apk --parallel 2
+
+      - name: Stage APK
+        run: |
+          apk="$(find build-android -type f -name '*.apk' -print -quit)"
+          if [[ -z "$apk" ]]; then
+            echo "The Android build completed without producing an APK." >&2
+            exit 1
+          fi
+          mkdir -p artifacts
+          cp "$apk" artifacts/CueFlow-android-arm64.apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cueflow-android-arm64
+          path: artifacts/CueFlow-android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,15 @@
+/build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+*.user
+*.apk
+*.aab
+.gradle/
+.idea/
+/build-core/
+/stage/
+*.tar.gz
+scroll_model_test-riscv64
+/build-android/
+/artifacts/
