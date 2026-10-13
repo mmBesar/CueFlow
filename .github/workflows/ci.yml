@@ -42,7 +42,7 @@ jobs:
         run: ctest --test-dir build-core --output-on-failure
 
       - name: Run standalone test script
-        run: ./scripts/test-scroll-model.sh
+        run: bash ./scripts/test-scroll-model.sh
 
   riscv64-core:
     name: Core tests (native RISC-V64 hardware)
@@ -79,7 +79,7 @@ jobs:
         run: ctest --test-dir build-core --output-on-failure
 
       - name: Run standalone test script
-        run: ./scripts/test-scroll-model.sh
+        run: bash ./scripts/test-scroll-model.sh
 
   linux-app-build:
     name: Qt application build (${{ matrix.arch }})
@@ -100,19 +100,46 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Set up Python for aqtinstall
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Show Qt installer environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          uname -a
+          printf 'PATH=%s\n' "$PATH"
+          command -v python3
+          python3 --version
+          /usr/bin/python3 --version
+          cmake --version
+          ninja --version
+
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.4.1
         with:
           version: '6.8.3'
           host: ${{ matrix.qt-host }}
           target: desktop
           arch: ${{ matrix.qt-arch }}
           install-deps: true
+          setup-python: false
           cache: false
           # Temporary workaround for current Qt repository metadata parsing issues.
           # Upstream's main branch includes fixes not yet in the published aqt release.
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.*'
+          py7zrversion: '==1.1.0'
+
+      - name: Verify Qt installation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf 'QT_ROOT_DIR=%s\n' "$QT_ROOT_DIR"
+          test -x "$QT_ROOT_DIR/bin/qmake"
+          "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
+          test -x "$QT_ROOT_DIR/bin/qt-cmake"
 
       - name: Configure application and tests
         run: >-
@@ -167,8 +194,25 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
+      - name: Set up Python for aqtinstall
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Show Android and Qt installer environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          uname -a
+          java -version
+          command -v python3
+          python3 --version
+          /usr/bin/python3 --version
+          printf 'ANDROID_HOME=%s\n' "${ANDROID_HOME:-unset}"
+          sdkmanager --version
+
       - name: Install Qt for Android
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@v4.4.1
         with:
           version: '6.8.3'
           # Qt >= 6.7 Android packages live under the all_os repository.
@@ -176,10 +220,20 @@ jobs:
           target: android
           arch: android_arm64_v8a
           install-deps: true
+          setup-python: false
           cache: false
           # Temporary workaround for current Qt repository metadata parsing issues.
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.*'
+          py7zrversion: '==1.1.0'
+
+      - name: Verify Android Qt installation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf 'QT_ROOT_DIR=%s\n' "$QT_ROOT_DIR"
+          test -x "$QT_ROOT_DIR/bin/qt-cmake"
+          "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
+          test -d "$QT_ROOT_DIR/qml"
 
       - name: Configure Android app
         run: |

@@ -3,7 +3,7 @@
 
 ## Qt installer note
 
-The CI pins Qt to 6.8.3 so package selection is reproducible. For Qt 6.7 and newer, Android packages must use `host: all_os` with `target: android`; they are no longer resolved from `linux/android`. The current workflow also temporarily installs `aqtinstall` from its upstream Git repository to pick up fixes for Qt repository metadata parsing issues. This is a workaround, not a permanent dependency pin; remove `aqtsource` once the corresponding fix ships in a released `aqtinstall` version.
+The CI pins Qt to 6.8.3 so package selection is reproducible. Android packages use `host: all_os` and `target: android`. The workflow uses `install-qt-action@v4.4.1`, which includes the Android repository-selection fix and temporarily installs `aqtinstall` from upstream Git to pick up Qt repository metadata fixes. This source override is a troubleshooting workaround, not a permanent dependency pin.
 
 The Linux Qt installer failure should be diagnosed from the full **Install Qt** step log, not only the short Actions annotation. The workflow disables the Qt cache during this troubleshooting run so a stale cache cannot mask the result.
 
@@ -29,8 +29,8 @@ CueFlow is intended to be built and tested by GitHub Actions, so contributors do
 
 - `core-tests`: configure, compile, and run the playback model tests on native Linux amd64 and arm64.
 - `riscv64-core`: compile and run the dependency-free playback tests on **native RISC-V64 hardware** through the RISE RISC-V Runners GitHub App. Install the [RISE RISC-V Runners (Personal) app](https://github.com/apps/rise-risc-v-runners-personal) on this repository first. This validates the core on real hardware, but does **not** prove the full Qt GUI builds or runs on RISC-V64.
-- `linux-app-build`: install Qt 6.8.3, build the app, run tests, and stage the application together with its Qt/QML runtime on native Linux amd64 and arm64 runners. It temporarily sources `aqtinstall` from upstream Git to pick up fixes for Qt repository metadata parsing, and selects the latest compatible `py7zr` 1.1 patch.
-- `android-apk`: build an arm64-v8a APK using Qt for Android (`host: all_os`, `target: android`) and upload it as a workflow artifact. Qt 6.7+ Android packages use the `all_os` repository. The NDK version is pinned to 27.2.12479018.
+- `linux-app-build`: install Qt 6.8.3, build the app, run tests, and stage the application together with its Qt/QML runtime on native Linux amd64 and arm64 runners. It uses the Ubuntu-provided Python rather than install-qt-action auto-selecting Python 3.14. A known `aqtinstall`/Python 3.14 interaction has produced Qt installation failures, so we intentionally use the runner Python and pin `py7zr` to 1.1.0. The installer step also prints diagnostic environment information and verifies the resulting Qt installation.
+- `android-apk`: build an arm64-v8a APK using Qt for Android (`host: all_os`, `target: android`) and upload it as a workflow artifact. The Android job prints its Java, Python, SDK, and Qt environment for easier diagnosis. Qt 6.7+ Android packages use the `all_os` repository. The NDK version is pinned to 27.2.12479018.
 
 ## Get a build
 
@@ -45,10 +45,10 @@ CI compilation cannot verify the visual behavior of mixed Arabic/English BiDi te
 
 ## If a Qt installation job fails
 
-Open the failed `Install Qt` or `Install Qt for Android` step and expand its complete log, not just the Actions annotations summary. The annotation only reports that the Python installer exited with status 1; the preceding `aqtinstall` output contains the actual reason (for example, missing package metadata, download failure, or archive extraction failure). For Qt 6.7+, the Android installer uses `host: all_os`; using `linux` makes version discovery fail because newer Android packages are published in the `all_os` repository. The desktop builds still use `linux` for amd64 and `linux_arm64` for arm64.
+Open the failed `Install Qt` or `Install Qt for Android` step and expand its complete log, not just the Actions annotations summary. The annotation only reports that the Python installer exited with status 1; the preceding `aqtinstall` output contains the actual reason (for example, missing package metadata, download failure, or archive extraction failure). The workflow uses `install-qt-action@v4.4.1`, `host: all_os` for Qt for Android, and the Ubuntu-provided Python rather than Python 3.14. Upstream `aqtinstall` has documented a Python 3.14 failure mode involving Qt archive symlinks (`TypeError: sequence item 1: expected str instance, bytes found`), including reports against Qt 6.8.3. The current jobs print the installer environment and explicitly verify the Qt installation after the action. If a build still fails, open the actual job and expand the failing step; the annotations summary by itself does not include the installer diagnostics. Desktop builds use `linux` for amd64 and `linux_arm64` for arm64.
 
 ## RISE RISC-V runner status
 
-The RISC-V job uses the exact official RISE label `runs-on: ubuntu-24.04-riscv`. Its first step prints `uname -a` and requires `uname -m` to be `riscv64`; the C++ build is native, without QEMU or a cross-compiler. `riscv64gc-unknown-linux-gnu` is a Rust target triple and is not needed by this C++/CMake job.
+The native RISC-V job uses the exact official RISE label `runs-on: ubuntu-24.04-riscv`. Its first step prints `uname -a` and requires `uname -m` to be `riscv64`; the C++ build is native, without QEMU or a cross-compiler. `riscv64gc-unknown-linux-gnu` is a Rust target triple and is not needed by this C++/CMake job.
 
 Install the [RISE RISC-V Runners (Personal) GitHub App](https://github.com/apps/rise-risc-v-runners-personal) on the personal account/repository that owns this project. Per the [official FAQ](https://riscv-runners.riseproject.dev/docs/faq.html), if the job is **Queued**, it can remain queued until a matching RISC-V node has capacity; the scheduler checks again every 15 seconds. If a workflow run was started before this native-runner job was committed, cancel that older run and start a new run on the latest commit: edits do not change jobs already created in an existing run.
