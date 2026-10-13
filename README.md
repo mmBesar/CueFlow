@@ -35,7 +35,9 @@ The display device is authoritative for playback. The remote sends intent (toggl
 
 ## GitHub-first development
 
-After this project is pushed to GitHub, every push and pull request will run `.github/workflows/ci.yml`. You do not need a local C++ compiler or Qt installation to verify a change: open the repository's **Actions** tab to inspect build and test results. Successful Qt builds attach short-lived, downloadable Linux test bundles containing the application and its Qt/QML runtime. These are not universal AppImages; the host still needs compatible system libraries and a Linux graphical session. Android APK/AAB and final release packaging are not wired up yet.
+After this project is pushed to GitHub, every push and pull request will run `.github/workflows/ci.yml`. You do not need a local C++ compiler or Qt installation to verify a change: open the repository's **Actions** tab to inspect build and test results. Successful Qt builds attach short-lived, downloadable Linux test bundles containing the application and its Qt/QML runtime. These are not universal AppImages; the host still needs compatible system libraries and a Linux graphical session. The CI workflow builds an Android arm64-v8a APK; it is an unsigned development artifact, not a release-ready package.
+
+The downloadable Linux tarballs are Qt-deployed test bundles, not self-contained AppImages. They still need host runtime libraries for the window system and graphics stack. For example, if startup reports `libxkbcommon.so.0` missing, install the package that provides it (`libxkbcommon0` on Debian/Ubuntu, `libxkbcommon` on Fedora/Arch). On NixOS or other systems without conventional system library paths, this tarball is not a drop-in portable package; it needs distro-native packaging or a deliberately bundled app format.
 
 The scroll model can be tested without Qt by configuring the core-only build:
 

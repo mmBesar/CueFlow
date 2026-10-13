@@ -44,7 +44,7 @@ A successful workflow uploads these seven-day development artifacts:
 - `cueflow-linux-arm64`
 - `cueflow-android-arm64`
 
-The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppImage and still expects compatible host system libraries plus a graphical session. The Android APK is unsigned for release distribution and needs real-device testing.
+The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppImage and still expects compatible host system libraries plus a graphical session. In particular, a host may need `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). On NixOS, this tarball is not a drop-in portable package because it depends on the host's dynamic-library environment. The Android APK is unsigned for release distribution and needs real-device testing.
 
 ## Known limits
 

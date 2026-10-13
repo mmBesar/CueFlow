@@ -45,11 +45,13 @@ if(CUEFLOW_BUILD_APP)
         Qt6::QuickControls2
     )
 
-    install(TARGETS cueflow RUNTIME DESTINATION bin)
-
-    # Produce a runnable Linux install tree with the Qt runtime and QML imports.
-    # Android packages its Qt/QML runtime through the Android deployment toolchain.
+    # qt_add_executable() creates a normal executable on desktop platforms,
+    # but a MODULE library on Android. Do not use a desktop RUNTIME install
+    # rule for that Android module: the APK target handles Android packaging.
     if(NOT ANDROID)
+        install(TARGETS cueflow RUNTIME DESTINATION bin)
+
+        # Produce a Linux install tree with the Qt runtime and QML imports.
         qt_generate_deploy_qml_app_script(
             TARGET cueflow
             OUTPUT_SCRIPT deploy_script
