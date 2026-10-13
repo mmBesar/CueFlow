@@ -116,15 +116,11 @@ jobs:
       - name: Check Qt repository architectures
         run: python -m aqt list-qt linux desktop --arch 6.8.3
 
-      - name: Check Qt 6.8.3 add-on modules
-        run: python -m aqt list-qt linux desktop --modules 6.8.3 "$QT_ARCH"
-
       - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools \
             2>&1 | tee diagnostics/qt-install.log
 
       - name: Discover and validate Qt installation
@@ -235,15 +231,11 @@ jobs:
       - name: Check Qt repository architectures
         run: python -m aqt list-qt linux_arm64 desktop --arch 6.8.3
 
-      - name: Check Qt 6.8.3 add-on modules
-        run: python -m aqt list-qt linux_arm64 desktop --modules 6.8.3 "$QT_ARCH"
-
       - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools \
             2>&1 | tee diagnostics/qt-install.log
 
       - name: Discover and validate Qt installation
@@ -365,17 +357,11 @@ jobs:
           set -euxo pipefail
           python -m aqt list-qt all_os android --arch 6.8.3 2>&1 | tee diagnostics/android-qt-architectures.log
 
-      - name: Check Android Qt 6.8.3 add-on modules
-        run: |
-          set -euxo pipefail
-          python -m aqt list-qt all_os android --modules 6.8.3 android_arm64_v8a 2>&1 | tee diagnostics/android-qt-modules.log
-
       - name: Download Qt 6.8.3 Linux host tools
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools \
             2>&1 | tee diagnostics/android-qt-host-install.log
 
       - name: Download Qt 6.8.3 for Android
@@ -385,7 +371,6 @@ jobs:
           # Install host tools separately so QT_HOST_PATH and its Qt modules are explicit.
           python -m aqt install-qt all_os android 6.8.3 android_arm64_v8a \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools \
             2>&1 | tee diagnostics/android-qt-install.log
 
       - name: Discover and validate Android and host Qt installations
