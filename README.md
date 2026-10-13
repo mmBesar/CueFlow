@@ -71,3 +71,6 @@ ctest --test-dir build --output-on-failure
 ## License
 
 MIT — see `LICENSE`.
+
+
+**CI note:** Qt builds install the Qt Declarative (`Qml`, `Quick`, `QuickControls2`) and Shader Tools modules. Linux Qt roots are discovered from `Qt6Config.cmake` rather than hard-coded from an architecture alias. Android uses a matching Linux host Qt install via `QT_HOST_PATH`. RISC-V CI is currently disabled.

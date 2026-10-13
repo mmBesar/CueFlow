@@ -51,3 +51,10 @@ The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppIma
 Workflow YAML and commands can be inspected locally, but only GitHub Actions can confirm that these particular Qt archive URLs, tool downloads, and platform toolchains work at run time. If a Qt job still fails, retain the complete output from the **Check Qt repository architectures**, **Check Qt 6.8.3 add-on modules**, and **Download Qt 6.8.3 packages** steps; that output identifies whether the failure is a repository-query, download, or extraction problem.
 
 CI does not replace real-device acceptance testing for Arabic/English BiDi, smooth live scrolling, remote pairing, display power management, and Android lifecycle behavior.
+
+
+## Qt installation notes (Qt 6.8.3)
+
+The workflow installs `qtdeclarative` and `qtshadertools`, required by this project’s `Qml`, `Quick`, and `QuickControls2` CMake components. It does not assume that aqt’s architecture alias is the on-disk directory name: it discovers the Qt prefix from `lib/cmake/Qt6/Qt6Config.cmake` and validates the required component config files.
+
+The Android job installs matching Linux host Qt tools separately from the Android arm64-v8a Qt package, and passes the discovered host prefix as `QT_HOST_PATH` during CMake configuration.
