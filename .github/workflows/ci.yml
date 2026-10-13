@@ -80,10 +80,13 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QT_HOST: linux
-      QT_ARCH: gcc_64
+      QT_ARCH: linux_gcc_64
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+
+      - name: Prepare diagnostic log directory
+        run: mkdir -p diagnostics
 
       - name: Install system dependencies
         run: |
@@ -106,24 +109,27 @@ jobs:
           set -euxo pipefail
           python -m pip install --disable-pip-version-check --upgrade pip
           python -m pip install --disable-pip-version-check \
-            'git+https://github.com/miurahr/aqtinstall.git' \
-            'py7zr==1.1.4'
-          python -m aqt version
+            'aqtinstall==3.3.0' \
+            'py7zr==1.1.4' 2>&1 | tee diagnostics/python-aqt-setup.log
+          python -m aqt version 2>&1 | tee -a diagnostics/python-aqt-setup.log
 
-      - name: Check Qt repository metadata
+      - name: Check Qt repository architectures
         run: python -m aqt list-qt linux desktop --arch 6.8.3
+
+      - name: Check Qt 6.8.3 add-on modules
+        run: python -m aqt list-qt linux desktop --modules 6.8.3 "$QT_ARCH"
 
       - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
-          python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools
+            --modules qtshadertools
 
       - name: Configure Qt environment
         run: |
           set -euxo pipefail
-          QT_ROOT_DIR="$RUNNER_TEMP/Qt/6.8.3/gcc_64"
+          QT_ROOT_DIR="$RUNNER_TEMP/Qt/6.8.3/linux_gcc_64"
           test -x "$QT_ROOT_DIR/bin/qmake"
           test -x "$QT_ROOT_DIR/bin/qt-cmake"
           "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
@@ -159,6 +165,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Upload Linux amd64 failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-linux-amd64-failure-diagnostics
+          path: |
+            diagnostics/**
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/**/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
   linux-arm64:
     name: Qt desktop build — Linux arm64
     runs-on: ubuntu-24.04-arm
@@ -168,6 +188,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+
+      - name: Prepare diagnostic log directory
+        run: mkdir -p diagnostics
 
       - name: Install system dependencies
         run: |
@@ -190,19 +213,22 @@ jobs:
           set -euxo pipefail
           python -m pip install --disable-pip-version-check --upgrade pip
           python -m pip install --disable-pip-version-check \
-            'git+https://github.com/miurahr/aqtinstall.git' \
-            'py7zr==1.1.4'
-          python -m aqt version
+            'aqtinstall==3.3.0' \
+            'py7zr==1.1.4' 2>&1 | tee diagnostics/python-aqt-setup.log
+          python -m aqt version 2>&1 | tee -a diagnostics/python-aqt-setup.log
 
-      - name: Check Qt repository metadata
+      - name: Check Qt repository architectures
         run: python -m aqt list-qt linux_arm64 desktop --arch 6.8.3
+
+      - name: Check Qt 6.8.3 add-on modules
+        run: python -m aqt list-qt linux_arm64 desktop --modules 6.8.3 "$QT_ARCH"
 
       - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools
+            --modules qtshadertools
 
       - name: Configure Qt environment
         run: |
@@ -243,6 +269,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Upload Linux arm64 failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-linux-arm64-failure-diagnostics
+          path: |
+            diagnostics/**
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/**/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
   android-arm64:
     name: Android APK — arm64-v8a
     runs-on: ubuntu-24.04
@@ -261,6 +301,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4
 
+      - name: Prepare diagnostic log directory
+        run: mkdir -p diagnostics
+
       - name: Install Android SDK and NDK packages
         run: |
           set -euxo pipefail
@@ -268,7 +311,7 @@ jobs:
             'platform-tools' \
             'platforms;android-36' \
             'build-tools;36.0.0' \
-            "ndk;${ANDROID_NDK_VERSION}"
+            "ndk;${ANDROID_NDK_VERSION}" 2>&1 | tee diagnostics/android-sdk-install.log
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
           "$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/ndk-build" --version
@@ -283,21 +326,28 @@ jobs:
           set -euxo pipefail
           python -m pip install --disable-pip-version-check --upgrade pip
           python -m pip install --disable-pip-version-check \
-            'git+https://github.com/miurahr/aqtinstall.git' \
-            'py7zr==1.1.4'
-          python -m aqt version
+            'aqtinstall==3.3.0' \
+            'py7zr==1.1.4' 2>&1 | tee diagnostics/python-aqt-setup.log
+          python -m aqt version 2>&1 | tee -a diagnostics/python-aqt-setup.log
 
-      - name: Check Android Qt repository metadata
-        run: python -m aqt list-qt linux android --arch 6.8.3
+      - name: Check Android Qt repository architectures
+        run: |
+          set -euxo pipefail
+          python -m aqt list-qt all_os android --arch 6.8.3 2>&1 | tee diagnostics/android-qt-architectures.log
+
+      - name: Check Android Qt 6.8.3 add-on modules
+        run: |
+          set -euxo pipefail
+          python -m aqt list-qt all_os android --modules 6.8.3 android_arm64_v8a 2>&1 | tee diagnostics/android-qt-modules.log
 
       - name: Download Qt 6.8.3 for Android
         run: |
           set -euxo pipefail
-          # The host is Linux; Android is the Qt target. Do not use all_os here.
-          python -m aqt install-qt linux android 6.8.3 android_arm64_v8a \
+          # Qt 6.7+ Android archives are served from the all_os repository.
+          python -m aqt install-qt all_os android 6.8.3 android_arm64_v8a \
             --outputdir "$RUNNER_TEMP/Qt" \
-            --modules qtdeclarative qtshadertools \
-            --autodesktop
+            --modules qtshadertools \
+            --autodesktop 2>&1 | tee diagnostics/android-qt-install.log
 
       - name: Configure Android Qt environment
         run: |
@@ -319,10 +369,12 @@ jobs:
             -DQT_ANDROID_PACKAGE_NAME=org.mmbesar.cueflow \
             -DQT_ANDROID_TARGET_SDK_VERSION=36 \
             -DQT_ANDROID_MIN_SDK_VERSION=28 \
-            -DQT_ANDROID_ABIS=arm64-v8a
+            -DQT_ANDROID_ABIS=arm64-v8a 2>&1 | tee diagnostics/android-cmake-configure.log
 
       - name: Compile Android APK
-        run: cmake --build build-android --target apk --parallel 2
+        run: |
+          set -euxo pipefail
+          cmake --build build-android --target apk --parallel 2 2>&1 | tee diagnostics/android-build.log
 
       - name: Stage Android APK
         run: |
@@ -342,4 +394,18 @@ jobs:
           name: cueflow-android-arm64
           path: artifacts/CueFlow-android-arm64.apk
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Android failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-android-failure-diagnostics
+          path: |
+            diagnostics/**
+            build-android/CMakeCache.txt
+            build-android/CMakeFiles/CMakeError.log
+            build-android/CMakeFiles/CMakeOutput.log
+            build-android/**/*.log
+          if-no-files-found: warn
           retention-days: 7
