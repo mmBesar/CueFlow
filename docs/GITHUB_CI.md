@@ -20,18 +20,18 @@ The workflow does not use `jurplel/install-qt-action` for Qt installation. That 
 
 The workflow pins released `aqtinstall==3.3.0` and `py7zr==1.1.4` instead of installing a moving development branch. Qt is pinned to 6.8.3 for reproducible package selection. The host and target are intentionally distinct:
 
-- Linux desktop amd64: host `linux`, target `desktop`, architecture `linux_gcc_64` (Qt 6.7+ naming).
+- Linux desktop amd64: host `linux`, target `desktop`, repository architecture ID `linux_gcc_64`; the installed Qt prefix is still under `gcc_64/`.
 - Linux desktop arm64: host `linux_arm64`, target `desktop`, architecture `linux_gcc_arm64`.
 - Android arm64: host `all_os`, target `android`, architecture `android_arm64_v8a` (Qt 6.7+ Android repository layout).
 
-Qt Quick's declarative framework comes with the base Qt installation, so it is not requested as an add-on module. The workflow separately requests `qtshadertools`. The Android job pins JDK 17 and Android NDK `27.2.12479018`, which is supported for Qt 6.8, and packages an arm64-v8a APK. On Android failure, the workflow uploads a diagnostic artifact with the pip/aqt version, metadata checks, Qt install output, CMake output, and build logs.
+Qt Quick, Qt Declarative, Quick Controls, and the shader tools are supplied by the base Qt package installation for this configuration. The workflow does not pass these package/archive names to `--modules`. Both Linux desktop jobs install `libgl1-mesa-dev`, so Qt CMake can resolve `WrapOpenGL` (the runtime `libgl1` package alone does not provide the development headers and linker metadata). The Android job pins JDK 17 and Android NDK `27.2.12479018`, which is supported for Qt 6.8, and packages an arm64-v8a APK. On Android failure, the workflow uploads a diagnostic artifact with the pip/aqt version, metadata checks, Qt install output, CMake output, and build logs.
 
 ## Find normal step logs
 
 1. Open the repository's **Actions** tab.
 2. Select the latest **CueFlow CI** workflow run.
 3. The run summary should list the five jobs above individually.
-4. Click the exact failed job; its named steps include **Install system dependencies**, **Install aqtinstall and archive support**, **Check Qt repository metadata**, **Download Qt 6.8.3 packages**, and the later CMake/build/test steps.
+4. Click the exact failed job; its named steps include **Install system dependencies**, **Install aqtinstall and archive support**, **Check Qt repository architecture**, **Download Qt 6.8.3 packages**, and the later CMake/build/test steps.
 5. Click/expand the failed step to see its command output. For the Qt download step, the `python -m aqt install-qt ...` output is no longer nested in `install-qt-action`'s internal log groups. On failed Qt/Android jobs, CI also uploads a `*-failure-diagnostics` artifact containing captured installer/build output and any generated CMake logs.
 
 The PR **Checks** summary/annotation panel is not the full step log. If the summary only says “This job failed”, use the Actions run and select the named job and failed step.
@@ -48,13 +48,13 @@ The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppIma
 
 ## Known limits
 
-Workflow YAML and commands can be inspected locally, but only GitHub Actions can confirm that these particular Qt archive URLs, tool downloads, and platform toolchains work at run time. If a Qt job still fails, retain the complete output from the **Check Qt repository architectures**, **Check Qt 6.8.3 add-on modules**, and **Download Qt 6.8.3 packages** steps; that output identifies whether the failure is a repository-query, download, or extraction problem.
+Workflow YAML and commands can be inspected locally, but only GitHub Actions can confirm that these particular Qt archive URLs, tool downloads, and platform toolchains work at run time. If a Qt job still fails, retain the complete output from **Check Qt repository architectures** and the relevant **Download Qt 6.8.3 ...** step; that output identifies whether the failure is a repository-query, download, or extraction problem.
 
 CI does not replace real-device acceptance testing for Arabic/English BiDi, smooth live scrolling, remote pairing, display power management, and Android lifecycle behavior.
 
 
 ## Qt installation notes (Qt 6.8.3)
 
-The workflow installs `qtdeclarative` and `qtshadertools`, required by this project’s `Qml`, `Quick`, and `QuickControls2` CMake components. It does not assume that aqt’s architecture alias is the on-disk directory name: it discovers the Qt prefix from `lib/cmake/Qt6/Qt6Config.cmake` and validates the required component config files.
+For Linux amd64, use the Qt repository architecture identifier `linux_gcc_64`. In the current repository metadata, using `gcc_64` can make aqt find the extension feeds (`qtwebengine`, `qtpdf`) but fail to match the base `qt_base` package. The installed Qt prefix is still expected under `gcc_64/`, so the workflow discovers the prefix from `lib/cmake/Qt6/Qt6Config.cmake` and validates the required component config files. The Qt CMake checks also require OpenGL development files, provided by Ubuntu’s `libgl1-mesa-dev` package.
 
 The Android job installs matching Linux host Qt tools separately from the Android arm64-v8a Qt package, and passes the discovered host prefix as `QT_HOST_PATH` during CMake configuration.

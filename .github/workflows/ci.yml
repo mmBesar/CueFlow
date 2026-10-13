@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QT_HOST: linux
-      QT_ARCH: gcc_64
+      QT_ARCH: linux_gcc_64
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -94,7 +94,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             build-essential cmake ninja-build \
-            libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libgl1-mesa-dev libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
             libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
             libxcb-xfixes0 libxcb-randr0 libxcb-render-util0 \
             libxcb-image0 libxcb-xinerama0 libx11-xcb1
@@ -119,7 +119,7 @@ jobs:
       - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
-          python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/qt-install.log
 
@@ -209,7 +209,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             build-essential cmake ninja-build \
-            libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libgl1-mesa-dev libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
             libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
             libxcb-xfixes0 libxcb-randr0 libxcb-render-util0 \
             libxcb-image0 libxcb-xinerama0 libx11-xcb1
@@ -360,7 +360,7 @@ jobs:
       - name: Download Qt 6.8.3 Linux host tools
         run: |
           set -euxo pipefail
-          python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/android-qt-host-install.log
 
