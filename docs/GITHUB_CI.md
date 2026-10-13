@@ -23,7 +23,7 @@ CueFlow is intended to be built and tested by GitHub Actions, so contributors do
    ```
 
    These commands only commit and push source; they do not compile anything locally. If the new repository has a different name or owner, change the remote URL accordingly.
-3. Open the repository's **Actions** tab and inspect the `CueFlow CI` run. The first run is also the first end-to-end check of the Qt and Android build configuration; those jobs have not been run in this development workspace. The RISC-V job additionally requires the RISE Personal GitHub App to be installed on this repository.
+3. Open the repository's **Actions** tab and inspect the `CueFlow CI` run. The first run is also the first end-to-end check of the Qt and Android build configuration. The Qt installer job uses Python 3.14 and py7zr 1.1.4 with the upstream aqtinstall source to address current Qt package metadata issues. The RISC-V job additionally requires the RISE Personal GitHub App to be installed on this repository.
 
 ## What Actions checks
 

@@ -103,7 +103,7 @@ jobs:
       - name: Set up Python for aqtinstall
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Show Qt installer environment
         shell: bash
@@ -127,10 +127,10 @@ jobs:
           install-deps: true
           setup-python: false
           cache: false
-          # Temporary workaround for current Qt repository metadata parsing issues.
-          # Upstream's main branch includes fixes not yet in the published aqt release.
+          # Use upstream aqtinstall for the current Qt repository metadata fix.
+          # Match its current runtime recommendation and py7zr dependency below.
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.0'
+          py7zrversion: '==1.1.4'
 
       - name: Verify Qt installation
         shell: bash
@@ -197,7 +197,7 @@ jobs:
       - name: Set up Python for aqtinstall
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Show Android and Qt installer environment
         shell: bash
@@ -222,9 +222,9 @@ jobs:
           install-deps: true
           setup-python: false
           cache: false
-          # Temporary workaround for current Qt repository metadata parsing issues.
+          # Use upstream aqtinstall for the current Qt repository metadata fix.
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.0'
+          py7zrversion: '==1.1.4'
 
       - name: Verify Android Qt installation
         shell: bash
