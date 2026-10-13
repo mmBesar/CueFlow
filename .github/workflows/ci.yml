@@ -26,7 +26,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure core-only build (no Qt required)
         run: >-
@@ -45,24 +45,37 @@ jobs:
         run: ./scripts/test-scroll-model.sh
 
   riscv64-core:
-    name: Core tests (riscv64 cross-build + QEMU)
-    runs-on: ubuntu-24.04
+    name: Core tests (native RISC-V64 hardware)
+    # Requires the RISE RISC-V Runners (Personal) GitHub App to be installed
+    # on this repository: https://github.com/apps/rise-risc-v-runners-personal
+    runs-on: ubuntu-24.04-riscv
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Install RISC-V cross compiler and emulator
+      - name: Verify native runner architecture
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y g++-riscv64-linux-gnu qemu-user
+          set -euxo pipefail
+          test "$(uname -m)" = riscv64
+          c++ --version
+          cmake --version
+          ninja --version
 
-      - name: Compile RISC-V test binary
+      - name: Configure core-only build
         run: >-
-          riscv64-linux-gnu-g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror
-          -static tests/scroll_model_test.cpp -o scroll_model_test-riscv64
+          cmake -S . -B build-core -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCUEFLOW_BUILD_APP=OFF
+          -DBUILD_TESTING=ON
 
-      - name: Run RISC-V test binary under QEMU
-        run: qemu-riscv64 ./scroll_model_test-riscv64
+      - name: Build core tests on native RISC-V64
+        run: cmake --build build-core --parallel 2
+
+      - name: Run core tests on native RISC-V64
+        run: ctest --test-dir build-core --output-on-failure
+
+      - name: Run standalone test script
+        run: ./scripts/test-scroll-model.sh
 
   linux-app-build:
     name: Qt application build (${{ matrix.arch }})
@@ -81,17 +94,20 @@ jobs:
             qt-arch: linux_gcc_arm64
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: 6.8.3
+          version: '6.8.*'
           host: ${{ matrix.qt-host }}
           target: desktop
           arch: ${{ matrix.qt-arch }}
           install-deps: true
           cache: true
+          # Keep aqt's Qt archive extractor on the action's known-good version.
+          aqtversion: '==3.3.0'
+          py7zrversion: '==1.1.0'
 
       - name: Configure application and tests
         run: >-
@@ -113,7 +129,7 @@ jobs:
           tar -czf "cueflow-linux-${{ matrix.arch }}.tar.gz" -C stage .
 
       - name: Upload Linux test bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cueflow-linux-${{ matrix.arch }}
           path: cueflow-linux-${{ matrix.arch }}.tar.gz
@@ -125,16 +141,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4.0.4
 
       - name: Install Android SDK and NDK packages
         run: |
@@ -149,12 +165,15 @@ jobs:
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v4
         with:
-          version: 6.8.3
-          host: all_os
+          version: '6.8.*'
+          host: linux
           target: android
           arch: android_arm64_v8a
           install-deps: true
           cache: true
+          # Keep aqt's Qt archive extractor on the action's known-good version.
+          aqtversion: '==3.3.0'
+          py7zrversion: '==1.1.0'
 
       - name: Configure Android app
         run: |
@@ -181,7 +200,7 @@ jobs:
           cp "$apk" artifacts/CueFlow-android-arm64.apk
 
       - name: Upload Android APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cueflow-android-arm64
           path: artifacts/CueFlow-android-arm64.apk
