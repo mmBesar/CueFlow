@@ -46,16 +46,20 @@ jobs:
 
   riscv64-core:
     name: Core tests (native RISC-V64 hardware)
-    # Requires the RISE RISC-V Runners (Personal) GitHub App to be installed
-    # on this repository: https://github.com/apps/rise-risc-v-runners-personal
+    # Requires the RISE RISC-V Runners (Personal) GitHub App installed on this repo:
+    # https://github.com/apps/rise-risc-v-runners-personal
+    # Native hardware: no QEMU and no cross-compiler.
     runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 30
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
-      - name: Verify native runner architecture
+      - name: Verify native RISC-V runner
+        shell: bash
         run: |
           set -euxo pipefail
+          uname -a
           test "$(uname -m)" = riscv64
           c++ --version
           cmake --version
@@ -68,10 +72,10 @@ jobs:
           -DCUEFLOW_BUILD_APP=OFF
           -DBUILD_TESTING=ON
 
-      - name: Build core tests on native RISC-V64
+      - name: Build tests on native RISC-V64
         run: cmake --build build-core --parallel 2
 
-      - name: Run core tests on native RISC-V64
+      - name: Run CTest on native RISC-V64
         run: ctest --test-dir build-core --output-on-failure
 
       - name: Run standalone test script
@@ -99,15 +103,16 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.*'
+          version: '6.8.3'
           host: ${{ matrix.qt-host }}
           target: desktop
           arch: ${{ matrix.qt-arch }}
           install-deps: true
-          cache: true
-          # Keep aqt's Qt archive extractor on the action's known-good version.
-          aqtversion: '==3.3.0'
-          py7zrversion: '==1.1.0'
+          cache: false
+          # Temporary workaround for current Qt repository metadata parsing issues.
+          # Upstream's main branch includes fixes not yet in the published aqt release.
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
+          py7zrversion: '==1.1.*'
 
       - name: Configure application and tests
         run: >-
@@ -165,15 +170,16 @@ jobs:
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.*'
-          host: linux
+          version: '6.8.3'
+          # Qt >= 6.7 Android packages live under the all_os repository.
+          host: all_os
           target: android
           arch: android_arm64_v8a
           install-deps: true
-          cache: true
-          # Keep aqt's Qt archive extractor on the action's known-good version.
-          aqtversion: '==3.3.0'
-          py7zrversion: '==1.1.0'
+          cache: false
+          # Temporary workaround for current Qt repository metadata parsing issues.
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
+          py7zrversion: '==1.1.*'
 
       - name: Configure Android app
         run: |

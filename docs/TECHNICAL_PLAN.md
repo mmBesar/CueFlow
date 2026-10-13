@@ -69,7 +69,7 @@ Do not claim perfect Arabic/BiDi support until this has been tested visually on 
 
 ### M4 — packaging and architecture coverage
 - Linux packages/artifacts for amd64 and arm64.
-- RISC-V64 build using native distro Qt development packages or a controlled cross-build, then runtime tests on actual riscv64 hardware.
+- Native RISC-V64 core testing through RISE runners is configured. Full Qt GUI build and runtime testing still requires a suitable Qt 6.5+ toolchain on RISC-V64.
 - Optional web client only if concrete use cases justify maintaining it; it is not required for the native product.
 
 ## Release acceptance criteria
