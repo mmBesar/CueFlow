@@ -1,54 +1,53 @@
 # GitHub-first development
 
+CueFlow's CI is designed so that source can be pushed to GitHub and all compilation, tests, Qt downloads, and packaging happen on GitHub-hosted runners. A local C++/Qt toolchain is not required for ordinary verification.
 
-## Qt installer note
+## Jobs
 
-The CI pins Qt to 6.8.3 so package selection is reproducible. Android packages use `host: all_os` and `target: android`. The workflow uses `install-qt-action@v4.4.1`, which includes the Android repository-selection fix and temporarily installs `aqtinstall` from upstream Git to pick up Qt repository metadata fixes. This source override is a troubleshooting workaround, not a permanent dependency pin.
+The workflow deliberately uses **five separately named jobs**, not a matrix, so each architecture/build appears as its own job in the GitHub Actions run:
 
-The Linux Qt installer failure should be diagnosed from the full **Install Qt** step log, not only the short Actions annotation. The workflow disables the Qt cache during this troubleshooting run so a stale cache cannot mask the result.
+- `Core tests — Linux amd64`
+- `Core tests — Linux arm64`
+- `Qt desktop build — Linux amd64`
+- `Qt desktop build — Linux arm64`
+- `Android APK — arm64-v8a`
 
-CueFlow is intended to be built and tested by GitHub Actions, so contributors do not need a local C++ or Qt toolchain just to validate changes.
+RISC-V is temporarily excluded while we get the mainstream builds stable. It can be reintroduced later as a separate native RISE job.
 
-## First push
+## Why Qt is installed as visible commands
 
-1. Create a new GitHub repository named `CueFlow` (a public repository is recommended so standard GitHub-hosted Linux ARM64 runners are available for free). Do not initialize it with another README or license; this source tree already contains both.
-2. Push this directory as the repository's first commit. From the project directory, after creating the empty repository:
+The workflow does not use `jurplel/install-qt-action` for Qt installation. That action groups internal commands and can leave the useful `aqtinstall` output tucked inside collapsed log groups. Here, Python installation, `aqtinstall` setup, repository metadata checks, and Qt package downloads are separate named workflow steps. The `aqt` command output is therefore ordinary step output, and any metadata/download/extraction exception should be visible directly in the failed step log.
 
-   ```bash
-   git init -b main
-   git add .
-   git commit -m "ci: add GitHub Actions builds"
-   git remote add origin https://github.com/mmBesar/CueFlow.git
-   git push -u origin main
-   ```
+The workflow uses the current upstream `aqtinstall` source and `py7zr==1.1.4` while troubleshooting Qt repository metadata. Qt is pinned to 6.8.3 for reproducible package selection. The host and target are intentionally distinct:
 
-   These commands only commit and push source; they do not compile anything locally. If the new repository has a different name or owner, change the remote URL accordingly.
-3. Open the repository's **Actions** tab and inspect the `CueFlow CI` run. The first run is also the first end-to-end check of the Qt and Android build configuration. The Qt installer job uses Python 3.14 and py7zr 1.1.4 with the upstream aqtinstall source to address current Qt package metadata issues. The RISC-V job additionally requires the RISE Personal GitHub App to be installed on this repository.
+- Linux desktop amd64: host `linux`, target `desktop`, architecture `gcc_64`.
+- Linux desktop arm64: host `linux_arm64`, target `desktop`, architecture `linux_gcc_arm64`.
+- Android arm64: **host `linux`, target `android`, architecture `android_arm64_v8a`**. `all_os` is not used for Android here.
 
-## What Actions checks
+Qt desktop jobs install the `qtdeclarative` and `qtshadertools` modules needed by the Qt Quick UI. The Android job pins JDK 17 and Android NDK `27.2.12479018` and packages an arm64-v8a APK.
 
-- `core-tests`: configure, compile, and run the playback model tests on native Linux amd64 and arm64.
-- `riscv64-core`: compile and run the dependency-free playback tests on **native RISC-V64 hardware** through the RISE RISC-V Runners GitHub App. Install the [RISE RISC-V Runners (Personal) app](https://github.com/apps/rise-risc-v-runners-personal) on this repository first. This validates the core on real hardware, but does **not** prove the full Qt GUI builds or runs on RISC-V64.
-- `linux-app-build`: install Qt 6.8.3, build the app, run tests, and stage the application together with its Qt/QML runtime on native Linux amd64 and arm64 runners. It uses the Ubuntu-provided Python rather than install-qt-action auto-selecting Python 3.14. A known `aqtinstall`/Python 3.14 interaction has produced Qt installation failures, so we intentionally use the runner Python and pin `py7zr` to 1.1.0. The installer step also prints diagnostic environment information and verifies the resulting Qt installation.
-- `android-apk`: build an arm64-v8a APK using Qt for Android (`host: all_os`, `target: android`) and upload it as a workflow artifact. The Android job prints its Java, Python, SDK, and Qt environment for easier diagnosis. Qt 6.7+ Android packages use the `all_os` repository. The NDK version is pinned to 27.2.12479018.
+## Find normal step logs
 
-## Get a build
+1. Open the repository's **Actions** tab.
+2. Select the latest **CueFlow CI** workflow run.
+3. The run summary should list the five jobs above individually.
+4. Click the exact failed job; its named steps include **Install system dependencies**, **Install aqtinstall and archive support**, **Check Qt repository metadata**, **Download Qt 6.8.3 packages**, and the later CMake/build/test steps.
+5. Click/expand the failed step to see its command output. For the Qt download step, the `python -m aqt install-qt ...` output is no longer nested in `install-qt-action`'s internal log groups.
 
-Open a successful workflow run and use its **Artifacts** section. The Linux artifacts are `cueflow-linux-amd64` and `cueflow-linux-arm64`; the Android artifact is `cueflow-android-arm64`. Artifacts expire after seven days and are meant for development testing, not as permanent releases. Download artifacts from the run; no local compilation is needed.
+The PR **Checks** summary/annotation panel is not the full step log. If the summary only says “This job failed”, use the Actions run and select the named job and failed step.
 
-The Linux `.tar.gz` contains a Qt-deployed application tree. Extract it and launch `bin/cueflow` from the extracted directory. It still requires compatible system libraries and a working Linux graphical session; it is not an AppImage. The Android artifact is a development APK and needs real-device testing.
+## Artifact outputs
 
-## What remains manual
+A successful workflow uploads these seven-day development artifacts:
 
-CI compilation cannot verify the visual behavior of mixed Arabic/English BiDi text, precise live scrolling, rotation/power behavior, or remote control between real devices. Keep those as explicit acceptance tests. Android release signing, permanent GitHub Releases, a universal Linux AppImage, and a full RISC-V64 Qt build are not configured yet.
+- `cueflow-linux-amd64`
+- `cueflow-linux-arm64`
+- `cueflow-android-arm64`
 
+The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppImage and still expects compatible host system libraries plus a graphical session. The Android APK is unsigned for release distribution and needs real-device testing.
 
-## If a Qt installation job fails
+## Known limits
 
-Open the failed `Install Qt` or `Install Qt for Android` step and expand its complete log, not just the Actions annotations summary. The annotation only reports that the Python installer exited with status 1; the preceding `aqtinstall` output contains the actual reason (for example, missing package metadata, download failure, or archive extraction failure). The workflow uses `install-qt-action@v4.4.1`, `host: all_os` for Qt for Android, and the Ubuntu-provided Python rather than Python 3.14. Upstream `aqtinstall` has documented a Python 3.14 failure mode involving Qt archive symlinks (`TypeError: sequence item 1: expected str instance, bytes found`), including reports against Qt 6.8.3. The current jobs print the installer environment and explicitly verify the Qt installation after the action. If a build still fails, open the actual job and expand the failing step; the annotations summary by itself does not include the installer diagnostics. Desktop builds use `linux` for amd64 and `linux_arm64` for arm64.
+Workflow YAML and commands can be inspected locally, but only GitHub Actions can confirm that these particular Qt archive URLs, tool downloads, and platform toolchains work at run time. If a Qt job still fails, retain the complete output from the **Check Qt repository metadata** and **Download Qt 6.8.3 packages** steps; that output identifies whether the failure is a repository-query, download, or extraction problem.
 
-## RISE RISC-V runner status
-
-The native RISC-V job uses the exact official RISE label `runs-on: ubuntu-24.04-riscv`. Its first step prints `uname -a` and requires `uname -m` to be `riscv64`; the C++ build is native, without QEMU or a cross-compiler. `riscv64gc-unknown-linux-gnu` is a Rust target triple and is not needed by this C++/CMake job.
-
-Install the [RISE RISC-V Runners (Personal) GitHub App](https://github.com/apps/rise-risc-v-runners-personal) on the personal account/repository that owns this project. Per the [official FAQ](https://riscv-runners.riseproject.dev/docs/faq.html), if the job is **Queued**, it can remain queued until a matching RISC-V node has capacity; the scheduler checks again every 15 seconds. If a workflow run was started before this native-runner job was committed, cancel that older run and start a new run on the latest commit: edits do not change jobs already created in an existing run.
+CI does not replace real-device acceptance testing for Arabic/English BiDi, smooth live scrolling, remote pairing, display power management, and Android lifecycle behavior.

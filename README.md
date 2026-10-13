@@ -5,7 +5,7 @@ CueFlow is a proposed native-first successor to PrompterNG. It is a new project 
 ## Goals
 
 - One application that can be either **Display** or **Remote**.
-- Native Linux desktop builds for `amd64`, `arm64`, and `riscv64` where a compatible Qt 6 toolchain is available; Android `arm64-v8a` is the first mobile target.
+- Native Linux desktop builds for `amd64` and `arm64`; Android `arm64-v8a` is the first mobile target. RISC-V is temporarily out of CI while the core builds are stabilized.
 - Markdown scripts and per-block automatic paragraph direction for Arabic/English BiDi text.
 - Time-based scrolling in rendered pixels per second, not one-pixel timer increments.
 - A live position slider, small pixel nudges, pause/resume while seeking, speed/font/text-width controls, reset, and fullscreen.
@@ -14,7 +14,7 @@ CueFlow is a proposed native-first successor to PrompterNG. It is a new project 
 
 ## Current status
 
-This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64, arm64, and native RISC-V64 hardware (via the RISE RISC-V Runners GitHub App), and builds/tests the Qt application on amd64 and arm64. Install the [RISE RISC-V Runners (Personal) GitHub App](https://github.com/apps/rise-risc-v-runners-personal) on the repository to enable the RISC-V job. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, and power management. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
+This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64 and arm64, and builds/tests the Qt application on amd64 and arm64 plus an Android arm64-v8a APK. The workflow uses five individually named jobs, with Qt installation commands split into normal workflow steps to make installer logs easier to inspect. RISC-V is temporarily disabled. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, and power management. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
 
 The first pairing flow is deliberately manual: start a session on the display, then enter one of the displayed LAN addresses, port `47773`, and the six-digit PIN on the remote. In this prototype, that PIN remains valid until hosting is stopped; expiry, attempt throttling, QR pairing, service discovery, TLS, Android power management, and packaging are planned follow-up work. Keep the prototype on a trusted LAN; the initial TCP transport is not encrypted and must not be exposed to the public Internet.
 
@@ -66,7 +66,7 @@ ctest --test-dir build --output-on-failure
 4. Drag the remote position slider while playing; the display should track continuously and resume after release.
 5. Test both role directions: Linux display + Android remote, then Android display + Linux remote.
 6. Test disconnect/reconnect, oversized script rejection, unavailable port, and wrong PIN.
-7. Test on Wayland and X11, then build/run on ARM64 and RISC-V64 Linux environments.
+7. Test on Wayland and X11, then build/run on ARM64 Linux. Reintroduce RISC-V testing once the main CI paths are reliable.
 
 ## License
 

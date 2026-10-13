@@ -13,54 +13,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  core-tests:
-    name: Core tests (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+  core-amd64:
+    name: Core tests — Linux amd64
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Configure core-only build (no Qt required)
-        run: >-
-          cmake -S . -B build-core -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCUEFLOW_BUILD_APP=OFF
-          -DBUILD_TESTING=ON
-
-      - name: Build core tests
-        run: cmake --build build-core --parallel 2
-
-      - name: Run core tests
-        run: ctest --test-dir build-core --output-on-failure
-
-      - name: Run standalone test script
-        run: bash ./scripts/test-scroll-model.sh
-
-  riscv64-core:
-    name: Core tests (native RISC-V64 hardware)
-    # Requires the RISE RISC-V Runners (Personal) GitHub App installed on this repo:
-    # https://github.com/apps/rise-risc-v-runners-personal
-    # Native hardware: no QEMU and no cross-compiler.
-    runs-on: ubuntu-24.04-riscv
-    timeout-minutes: 30
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-
-      - name: Verify native RISC-V runner
-        shell: bash
+      - name: Show toolchain
         run: |
           set -euxo pipefail
           uname -a
-          test "$(uname -m)" = riscv64
           c++ --version
           cmake --version
           ninja --version
@@ -72,74 +35,101 @@ jobs:
           -DCUEFLOW_BUILD_APP=OFF
           -DBUILD_TESTING=ON
 
-      - name: Build tests on native RISC-V64
+      - name: Compile core tests
         run: cmake --build build-core --parallel 2
 
-      - name: Run CTest on native RISC-V64
+      - name: Run CTest
         run: ctest --test-dir build-core --output-on-failure
 
-      - name: Run standalone test script
+      - name: Run standalone scroll tests
         run: bash ./scripts/test-scroll-model.sh
 
-  linux-app-build:
-    name: Qt application build (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            qt-host: linux
-            qt-arch: gcc_64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qt-host: linux_arm64
-            qt-arch: linux_gcc_arm64
+  core-arm64:
+    name: Core tests — Linux arm64
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Set up Python for aqtinstall
+      - name: Show toolchain
+        run: |
+          set -euxo pipefail
+          uname -a
+          c++ --version
+          cmake --version
+          ninja --version
+
+      - name: Configure core-only build
+        run: >-
+          cmake -S . -B build-core -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCUEFLOW_BUILD_APP=OFF
+          -DBUILD_TESTING=ON
+
+      - name: Compile core tests
+        run: cmake --build build-core --parallel 2
+
+      - name: Run CTest
+        run: ctest --test-dir build-core --output-on-failure
+
+      - name: Run standalone scroll tests
+        run: bash ./scripts/test-scroll-model.sh
+
+  linux-amd64:
+    name: Qt desktop build — Linux amd64
+    runs-on: ubuntu-24.04
+    env:
+      QT_HOST: linux
+      QT_ARCH: gcc_64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential cmake ninja-build \
+            libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
+            libxcb-xfixes0 libxcb-randr0 libxcb-render-util0 \
+            libxcb-image0 libxcb-xinerama0 libx11-xcb1
+
+      - name: Set up Python for Qt installer
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
-      - name: Show Qt installer environment
-        shell: bash
+      - name: Install aqtinstall and archive support
         run: |
           set -euxo pipefail
-          uname -a
-          printf 'PATH=%s\n' "$PATH"
-          command -v python3
-          python3 --version
-          /usr/bin/python3 --version
-          cmake --version
-          ninja --version
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check \
+            'git+https://github.com/miurahr/aqtinstall.git' \
+            'py7zr==1.1.4'
+          python -m aqt version
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4.4.1
-        with:
-          version: '6.8.3'
-          host: ${{ matrix.qt-host }}
-          target: desktop
-          arch: ${{ matrix.qt-arch }}
-          install-deps: true
-          setup-python: false
-          cache: false
-          # Use upstream aqtinstall for the current Qt repository metadata fix.
-          # Match its current runtime recommendation and py7zr dependency below.
-          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.4'
+      - name: Check Qt repository metadata
+        run: python -m aqt list-qt linux desktop --arch 6.8.3
 
-      - name: Verify Qt installation
-        shell: bash
+      - name: Download Qt 6.8.3 packages
         run: |
           set -euxo pipefail
-          printf 'QT_ROOT_DIR=%s\n' "$QT_ROOT_DIR"
+          python -m aqt install-qt linux desktop 6.8.3 gcc_64 \
+            --outputdir "$RUNNER_TEMP/Qt" \
+            --modules qtdeclarative qtshadertools
+
+      - name: Configure Qt environment
+        run: |
+          set -euxo pipefail
+          QT_ROOT_DIR="$RUNNER_TEMP/Qt/6.8.3/gcc_64"
           test -x "$QT_ROOT_DIR/bin/qmake"
-          "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
           test -x "$QT_ROOT_DIR/bin/qt-cmake"
+          "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "$QT_ROOT_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Configure application and tests
         run: >-
@@ -148,29 +138,116 @@ jobs:
           -DCUEFLOW_BUILD_APP=ON
           -DBUILD_TESTING=ON
 
-      - name: Build application and tests
+      - name: Compile application and tests
         run: cmake --build build --parallel 2
 
-      - name: Run tests
+      - name: Run CTest
         run: ctest --test-dir build --output-on-failure
 
       - name: Stage Qt application bundle
         run: |
+          set -euxo pipefail
           rm -rf stage
           cmake --install build --prefix "$PWD/stage"
-          tar -czf "cueflow-linux-${{ matrix.arch }}.tar.gz" -C stage .
+          tar -czf cueflow-linux-amd64.tar.gz -C stage .
 
-      - name: Upload Linux test bundle
+      - name: Upload Linux amd64 artifact
         uses: actions/upload-artifact@v6
         with:
-          name: cueflow-linux-${{ matrix.arch }}
-          path: cueflow-linux-${{ matrix.arch }}.tar.gz
+          name: cueflow-linux-amd64
+          path: cueflow-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 7
 
-  android-apk:
-    name: Android APK (arm64-v8a)
+  linux-arm64:
+    name: Qt desktop build — Linux arm64
+    runs-on: ubuntu-24.04-arm
+    env:
+      QT_HOST: linux_arm64
+      QT_ARCH: linux_gcc_arm64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential cmake ninja-build \
+            libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
+            libxcb-xfixes0 libxcb-randr0 libxcb-render-util0 \
+            libxcb-image0 libxcb-xinerama0 libx11-xcb1
+
+      - name: Set up Python for Qt installer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install aqtinstall and archive support
+        run: |
+          set -euxo pipefail
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check \
+            'git+https://github.com/miurahr/aqtinstall.git' \
+            'py7zr==1.1.4'
+          python -m aqt version
+
+      - name: Check Qt repository metadata
+        run: python -m aqt list-qt linux_arm64 desktop --arch 6.8.3
+
+      - name: Download Qt 6.8.3 packages
+        run: |
+          set -euxo pipefail
+          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
+            --outputdir "$RUNNER_TEMP/Qt" \
+            --modules qtdeclarative qtshadertools
+
+      - name: Configure Qt environment
+        run: |
+          set -euxo pipefail
+          QT_ROOT_DIR="$RUNNER_TEMP/Qt/6.8.3/linux_gcc_arm64"
+          test -x "$QT_ROOT_DIR/bin/qmake"
+          test -x "$QT_ROOT_DIR/bin/qt-cmake"
+          "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "$QT_ROOT_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Configure application and tests
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCUEFLOW_BUILD_APP=ON
+          -DBUILD_TESTING=ON
+
+      - name: Compile application and tests
+        run: cmake --build build --parallel 2
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Stage Qt application bundle
+        run: |
+          set -euxo pipefail
+          rm -rf stage
+          cmake --install build --prefix "$PWD/stage"
+          tar -czf cueflow-linux-arm64.tar.gz -C stage .
+
+      - name: Upload Linux arm64 artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-linux-arm64
+          path: cueflow-linux-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  android-arm64:
+    name: Android APK — arm64-v8a
     runs-on: ubuntu-24.04
+    env:
+      ANDROID_NDK_VERSION: 27.2.12479018
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -186,57 +263,55 @@ jobs:
 
       - name: Install Android SDK and NDK packages
         run: |
+          set -euxo pipefail
           sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;27.2.12479018"
+            'platform-tools' \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            "ndk;${ANDROID_NDK_VERSION}"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          "$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/ndk-build" --version
 
-      - name: Set up Python for aqtinstall
+      - name: Set up Python for Qt installer
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
-      - name: Show Android and Qt installer environment
-        shell: bash
+      - name: Install aqtinstall and archive support
         run: |
           set -euxo pipefail
-          uname -a
-          java -version
-          command -v python3
-          python3 --version
-          /usr/bin/python3 --version
-          printf 'ANDROID_HOME=%s\n' "${ANDROID_HOME:-unset}"
-          sdkmanager --version
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check \
+            'git+https://github.com/miurahr/aqtinstall.git' \
+            'py7zr==1.1.4'
+          python -m aqt version
 
-      - name: Install Qt for Android
-        uses: jurplel/install-qt-action@v4.4.1
-        with:
-          version: '6.8.3'
-          # Qt >= 6.7 Android packages live under the all_os repository.
-          host: all_os
-          target: android
-          arch: android_arm64_v8a
-          install-deps: true
-          setup-python: false
-          cache: false
-          # Use upstream aqtinstall for the current Qt repository metadata fix.
-          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git'
-          py7zrversion: '==1.1.4'
+      - name: Check Android Qt repository metadata
+        run: python -m aqt list-qt linux android --arch 6.8.3
 
-      - name: Verify Android Qt installation
-        shell: bash
+      - name: Download Qt 6.8.3 for Android
         run: |
           set -euxo pipefail
-          printf 'QT_ROOT_DIR=%s\n' "$QT_ROOT_DIR"
+          # The host is Linux; Android is the Qt target. Do not use all_os here.
+          python -m aqt install-qt linux android 6.8.3 android_arm64_v8a \
+            --outputdir "$RUNNER_TEMP/Qt" \
+            --modules qtdeclarative qtshadertools \
+            --autodesktop
+
+      - name: Configure Android Qt environment
+        run: |
+          set -euxo pipefail
+          QT_ROOT_DIR="$RUNNER_TEMP/Qt/6.8.3/android_arm64_v8a"
+          test -x "$QT_ROOT_DIR/bin/qmake"
           test -x "$QT_ROOT_DIR/bin/qt-cmake"
           "$QT_ROOT_DIR/bin/qmake" -query QT_VERSION
-          test -d "$QT_ROOT_DIR/qml"
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "$QT_ROOT_DIR/bin" >> "$GITHUB_PATH"
 
-      - name: Configure Android app
+      - name: Configure Android application
         run: |
+          set -euxo pipefail
           "$QT_ROOT_DIR/bin/qt-cmake" \
             -S . -B build-android -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -246,14 +321,16 @@ jobs:
             -DQT_ANDROID_MIN_SDK_VERSION=28 \
             -DQT_ANDROID_ABIS=arm64-v8a
 
-      - name: Build APK
+      - name: Compile Android APK
         run: cmake --build build-android --target apk --parallel 2
 
-      - name: Stage APK
+      - name: Stage Android APK
         run: |
+          set -euxo pipefail
           apk="$(find build-android -type f -name '*.apk' -print -quit)"
           if [[ -z "$apk" ]]; then
-            echo "The Android build completed without producing an APK." >&2
+            echo 'Build finished without producing an APK.' >&2
+            find build-android -maxdepth 7 -type f -print >&2
             exit 1
           fi
           mkdir -p artifacts
