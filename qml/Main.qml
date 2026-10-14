@@ -18,6 +18,9 @@ ApplicationWindow {
     // Only the small floating buttons auto-hide; the main controls stay visible.
     property bool overlayControlsVisible: true
     property bool displayControlsVisible: true
+    // Keep the reading/remote screens compact on phones; each mode remembers its own tuning state.
+    property bool displayTuningExpanded: false
+    property bool remoteTuningExpanded: false
     property var flavorNames: ["Latte", "Frappé", "Macchiato", "Mocha"]
     property var accentNames: [
         "Rosewater", "Flamingo", "Pink", "Mauve", "Red", "Maroon",
@@ -464,8 +467,13 @@ ApplicationWindow {
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 gesturePolicy: TapHandler.DragThreshold
                                 onTapped: {
-                                    if (window.visibility === Window.FullScreen && !window.editingScript)
+                                    if (window.visibility === Window.FullScreen && !window.editingScript) {
+                                        // Touch-to-toggle is intentionally fullscreen-only, so normal
+                                        // taps in the editor and remote controls remain ordinary input.
+                                        if (Qt.platform.os === "android")
+                                            session.togglePlayback()
                                         window.revealControls()
+                                    }
                                 }
                             }
 
@@ -532,6 +540,7 @@ ApplicationWindow {
                                         width: 40
                                         height: 40
                                         anchors.centerIn: parent
+                                        x: -5 // optical correction: move the glyph farther inward without moving the hit target
                                         property color glyphColor: window.activePalette.text
                                         property bool fullscreenMode: window.visibility === Window.FullScreen
 
@@ -568,6 +577,7 @@ ApplicationWindow {
                                         width: 40
                                         height: 40
                                         anchors.centerIn: parent
+                                        x: -5 // match the fullscreen glyph's inward optical alignment
                                         property color glyphColor: window.activePalette.text
                                         property color glyphAccent: window.accentColor
 
@@ -587,14 +597,32 @@ ApplicationWindow {
                         id: editorPage
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 20
-                            spacing: 12
-                            Label { text: "Script editor"; font.pixelSize: 22; font.bold: true }
-                            Label { text: "Markdown • Arabic + English • stored locally"; color: window.activePalette.subtext0 }
+                            // Phone-safe margins; the editor itself grows to the full remaining area.
+                            anchors.margins: window.width < 600 ? 8 : Math.min(32, Math.max(20, window.width * 0.025))
+                            spacing: window.height < 600 ? 6 : 10
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    text: "Script editor"
+                                    font.pixelSize: window.width < 600 ? 19 : 24
+                                    font.bold: true
+                                    color: window.activePalette.text
+                                }
+                                Item { Layout.fillWidth: true }
+                                Label {
+                                    visible: window.width >= 600 && window.height >= 500
+                                    text: "MARKDOWN · ARABIC + ENGLISH · LOCAL"
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 10
+                                    font.letterSpacing: 0.5
+                                }
+                            }
                             ScrollView {
                                 id: scriptEditorScroll
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                Layout.minimumHeight: 0
                                 clip: true
                                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                                 TextArea {
@@ -605,7 +633,8 @@ ApplicationWindow {
                                     placeholderText: "Write your Markdown script here…"
                                     wrapMode: TextEdit.Wrap
                                     font.family: "monospace"
-                                    font.pixelSize: 16
+                                    font.pixelSize: window.width < 600 ? 16 : 18
+                                    padding: window.width < 600 ? 10 : 14
                                     selectByMouse: true
                                     persistentSelection: true
                                     onTextChanged: {
@@ -624,22 +653,35 @@ ApplicationWindow {
                                             }
                                         }
                                     }
-                                    background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
+                                    background: Rectangle {
+                                        color: window.activePalette.mantle
+                                        radius: 10
+                                        border.color: scriptEditor.activeFocus ? window.accentColor : window.activePalette.surface1
+                                    }
                                 }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
+                                spacing: 6
                                 Button {
                                     text: "Clear"
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "Clear the draft"
                                     onClicked: {
                                         scriptEditor.text = ""
                                         scriptEditor.forceActiveFocus()
                                     }
                                 }
-                                Item { Layout.fillWidth: true }
-                                Button { text: "Back to reading"; onClicked: { window.editingScript = false; window.revealControls() } }
+                                Item {
+                                    Layout.fillWidth: window.width >= 480
+                                    Layout.minimumWidth: 0
+                                }
                                 Button {
-                                    text: "Apply script"
+                                    text: window.width < 420 ? "Back" : "Back to reading"
+                                    onClicked: { window.editingScript = false; window.revealControls() }
+                                }
+                                Button {
+                                    text: window.width < 420 ? "Apply" : "Apply script"
                                     highlighted: true
                                     onClicked: {
                                         session.setScript(session.draftScript)
@@ -667,25 +709,35 @@ ApplicationWindow {
                     Layout.bottomMargin: 5
                     spacing: 4
 
-                    RowLayout {
+                    GridLayout {
                         Layout.fillWidth: true
+                        columns: window.width >= 760 ? 3 : (window.width < 440 ? 2 : 4)
+                        columnSpacing: 6
+                        rowSpacing: 4
                         Button {
+                            Layout.fillWidth: true
                             text: session.playing ? "Pause" : "Play"
                             highlighted: true
                             onClicked: session.togglePlayback()
                         }
-                        Button { text: "Reset"; onClicked: session.resetPlayback() }
+                        Button { Layout.fillWidth: true; text: "Reset"; onClicked: session.resetPlayback() }
                         Button {
-                            text: session.hosting ? "Stop remote" : "Enable remote"
+                            Layout.fillWidth: true
+                            text: session.hosting ? "Stop remote" : (window.width < 760 ? "Remote" : "Enable remote")
+                            ToolTip.text: session.hosting ? "Stop the remote session" : "Enable remote control from another device"
                             onClicked: session.hosting ? session.stopHosting() : session.startHosting()
                         }
-                        Item { Layout.fillWidth: true }
-                        Label { text: Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1; font.pixelSize: 12 }
+                        Button {
+                            visible: window.width < 760
+                            Layout.fillWidth: true
+                            text: window.displayTuningExpanded ? "Hide tuning" : "Tune"
+                            onClicked: window.displayTuningExpanded = !window.displayTuningExpanded
+                        }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Label { text: "Position"; Layout.preferredWidth: 65; color: window.activePalette.subtext1 }
+                        Label { text: "Position"; Layout.preferredWidth: window.width < 420 ? 52 : 65; color: window.activePalette.subtext1 }
                         Slider {
                             id: displaySeek
                             Layout.fillWidth: true
@@ -706,11 +758,18 @@ ApplicationWindow {
                                 }
                             }
                         }
+                        Label {
+                            visible: window.width >= 500
+                            text: Math.round(session.progress * 1000) / 10 + "%"
+                            color: window.activePalette.subtext1
+                            font.pixelSize: 12
+                        }
                     }
                     GridLayout {
                         id: displayTuningControls
                         Layout.fillWidth: true
-                        columns: window.width >= 760 ? 3 : 1
+                        visible: window.width >= 760 || window.displayTuningExpanded
+                        columns: window.width >= 960 ? 3 : 1
                         columnSpacing: 14
                         rowSpacing: 4
 
@@ -815,18 +874,20 @@ ApplicationWindow {
                 anchors.fill: parent
                 clip: true
                 contentWidth: width
-                contentHeight: remoteContent.implicitHeight + 44
+                contentHeight: remoteContent.implicitHeight + remoteContent.y + remoteContent.contentMargin
                 boundsBehavior: Flickable.StopAtBounds
 
             ColumnLayout {
                 id: remoteContent
-                x: 22
-                y: 22
-                width: Math.max(1, remoteFlick.width - 44)
-                spacing: 16
+                property int contentMargin: window.width < 600 ? 10 : 22
+                x: contentMargin
+                y: contentMargin
+                width: Math.max(1, remoteFlick.width - contentMargin * 2)
+                spacing: window.width < 600 ? 10 : 16
 
-                Label { text: "Remote control"; font.pixelSize: 26; font.bold: true }
+                Label { text: "Remote control"; font.pixelSize: window.width < 600 ? 22 : 28; font.bold: true }
                 Label {
+                    visible: window.width >= 500
                     text: "Connect directly to the device showing your script. No cloud account or separate server."
                     color: window.activePalette.subtext1
                     wrapMode: Text.Wrap
@@ -875,29 +936,45 @@ ApplicationWindow {
                         spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            Button { text: "− 20 px"; onClicked: session.nudgePixels(-20); onPressAndHold: session.nudgePixels(-60) }
-                            Item { Layout.fillWidth: true }
+                            spacing: 6
                             Button {
+                                Layout.fillWidth: true
+                                text: window.width < 500 ? "−20" : "− 20 px"
+                                onClicked: session.nudgePixels(-20)
+                                onPressAndHold: session.nudgePixels(-60)
+                            }
+                            Button {
+                                Layout.fillWidth: true
                                 text: session.playing ? "Pause" : "Play"
                                 highlighted: true
                                 onClicked: session.togglePlayback()
                             }
-                            Item { Layout.fillWidth: true }
-                            Button { text: "+ 20 px"; onClicked: session.nudgePixels(20); onPressAndHold: session.nudgePixels(60) }
+                            Button {
+                                Layout.fillWidth: true
+                                text: window.width < 500 ? "+20" : "+ 20 px"
+                                onClicked: session.nudgePixels(20)
+                                onPressAndHold: session.nudgePixels(60)
+                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
                             Button {
                                 Layout.fillWidth: true
-                                text: session.viewerFullscreen ? "Exit display fullscreen" : "Fullscreen display"
-                                font.pixelSize: 12
+                                text: window.width < 500
+                                      ? (session.viewerFullscreen ? "Exit fullscreen" : "Fullscreen")
+                                      : (session.viewerFullscreen ? "Exit display fullscreen" : "Fullscreen display")
+                                font.pixelSize: window.width < 500 ? 11 : 12
+                                ToolTip.text: "Toggle fullscreen on the display device"
                                 onClicked: session.requestViewerFullscreenToggle()
                             }
                             Button {
                                 Layout.fillWidth: true
-                                text: session.viewerControlsVisible ? "Hide display controls" : "Show display controls"
-                                font.pixelSize: 12
+                                text: window.width < 500
+                                      ? (session.viewerControlsVisible ? "Hide controls" : "Show controls")
+                                      : (session.viewerControlsVisible ? "Hide display controls" : "Show display controls")
+                                font.pixelSize: window.width < 500 ? 11 : 12
+                                ToolTip.text: "Show or hide the display controls"
                                 onClicked: session.requestViewerControlsToggle()
                             }
                         }
@@ -922,9 +999,24 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1 }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: window.width < 760
+                            Button {
+                                Layout.fillWidth: true
+                                text: window.remoteTuningExpanded ? "Hide tuning" : "Tune"
+                                onClicked: window.remoteTuningExpanded = !window.remoteTuningExpanded
+                            }
+                            Button {
+                                Layout.fillWidth: true
+                                text: "Reset to beginning"
+                                onClicked: session.resetPlayback()
+                            }
+                        }
+                        Label { visible: window.width >= 760 || window.remoteTuningExpanded; text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1 }
                         Slider {
                             id: remoteSpeed
+                            visible: window.width >= 760 || window.remoteTuningExpanded
                             Layout.fillWidth: true
                             from: 0; to: 600; stepSize: 1
                             Binding { target: remoteSpeed; property: "value"; value: session.speed; when: !remoteSpeed.pressed }
@@ -940,9 +1032,10 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1 }
+                        Label { visible: window.width >= 760 || window.remoteTuningExpanded; text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1 }
                         Slider {
                             id: remoteFontSize
+                            visible: window.width >= 760 || window.remoteTuningExpanded
                             Layout.fillWidth: true
                             from: 12; to: 100; stepSize: 1
                             Binding { target: remoteFontSize; property: "value"; value: session.fontSize; when: !remoteFontSize.pressed }
@@ -958,9 +1051,10 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1 }
+                        Label { visible: window.width >= 760 || window.remoteTuningExpanded; text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1 }
                         Slider {
                             id: remoteWidth
+                            visible: window.width >= 760 || window.remoteTuningExpanded
                             Layout.fillWidth: true
                             from: 35; to: 100; stepSize: 1
                             Binding { target: remoteWidth; property: "value"; value: session.textWidth; when: !remoteWidth.pressed }
@@ -976,7 +1070,11 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Button { text: "Reset to beginning"; onClicked: session.resetPlayback() }
+                        Button {
+                            visible: window.width >= 760
+                            text: "Reset to beginning"
+                            onClicked: session.resetPlayback()
+                        }
                     }
                 }
 
@@ -987,11 +1085,16 @@ ApplicationWindow {
                     background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                     ColumnLayout {
                         anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 8
                         Label { text: "Edit or send a script"; font.bold: true }
                         ScrollView {
                             id: remoteScriptEditorScroll
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 190
+                            Layout.preferredHeight: window.width < 600
+                                                  ? Math.max(120, Math.min(180, remoteFlick.height * 0.25))
+                                                  : Math.max(200, Math.min(320, remoteFlick.height * 0.32))
+                            Layout.minimumHeight: 100
                             clip: true
                             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                             TextArea {
@@ -1001,8 +1104,14 @@ ApplicationWindow {
                                 text: session.draftScript
                                 wrapMode: TextEdit.Wrap
                                 placeholderText: "Paste Markdown here…"
+                                padding: window.width < 600 ? 10 : 12
                                 selectByMouse: true
                                 persistentSelection: true
+                                background: Rectangle {
+                                    color: window.activePalette.base
+                                    radius: 8
+                                    border.color: remoteScriptEditor.activeFocus ? window.accentColor : window.activePalette.surface1
+                                }
                                 onTextChanged: {
                                     if (!syncingDraft)
                                         session.setDraftScript(text)
@@ -1148,10 +1257,104 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Space"; context: Qt.ApplicationShortcut; enabled: !session.remoteMode && !window.editingScript; onActivated: session.togglePlayback() }
-    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; onActivated: session.resetPlayback() }
+    // Space works in both modes on desktop, but is left alone while typing.
+    Shortcut {
+        sequence: "Space"
+        context: Qt.WindowShortcut
+        enabled: Qt.platform.os !== "android"
+                 && !window.editingScript
+                 && !appearanceDialog.visible
+                 && !remoteScriptEditor.activeFocus
+                 && !hostField.activeFocus
+                 && !pinField.activeFocus
+        onActivated: session.togglePlayback()
+    }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: !appearanceDialog.visible
+        onActivated: {
+            if (session.remoteMode && session.viewerFullscreen)
+                session.requestViewerFullscreenToggle()
+            else if (!session.remoteMode && window.visibility === Window.FullScreen)
+                window.visibility = Window.Windowed
+        }
+    }
 
     Component.onCompleted: window.revealControls()
-    Shortcut { sequence: "Left"; context: Qt.ApplicationShortcut; enabled: !window.editingScript; onActivated: session.nudgePixels(-20) }
-    Shortcut { sequence: "Right"; context: Qt.ApplicationShortcut; enabled: !window.editingScript; onActivated: session.nudgePixels(20) }
+    // Keyboard controls work in either role: locally on the display, or through
+    // the remote protocol when this device controls another display.
+    // Arrow keys remain available to editors, connection fields, and focused sliders.
+    Shortcut {
+        sequence: "Up"
+        context: Qt.WindowShortcut
+        enabled: !window.editingScript
+                 && !appearanceDialog.visible
+                 && !remoteScriptEditor.activeFocus
+                 && !hostField.activeFocus
+                 && !pinField.activeFocus
+                 && !displaySeek.activeFocus
+                 && !displaySpeed.activeFocus
+                 && !displayFontSize.activeFocus
+                 && !displayWidth.activeFocus
+                 && !remoteSeek.activeFocus
+                 && !remoteSpeed.activeFocus
+                 && !remoteFontSize.activeFocus
+                 && !remoteWidth.activeFocus
+        onActivated: session.nudgePixels(-40)
+    }
+    Shortcut {
+        sequence: "Down"
+        context: Qt.WindowShortcut
+        enabled: !window.editingScript
+                 && !appearanceDialog.visible
+                 && !remoteScriptEditor.activeFocus
+                 && !hostField.activeFocus
+                 && !pinField.activeFocus
+                 && !displaySeek.activeFocus
+                 && !displaySpeed.activeFocus
+                 && !displayFontSize.activeFocus
+                 && !displayWidth.activeFocus
+                 && !remoteSeek.activeFocus
+                 && !remoteSpeed.activeFocus
+                 && !remoteFontSize.activeFocus
+                 && !remoteWidth.activeFocus
+        onActivated: session.nudgePixels(40)
+    }
+    Shortcut {
+        sequence: "Left"
+        context: Qt.WindowShortcut
+        enabled: !window.editingScript
+                 && !appearanceDialog.visible
+                 && !remoteScriptEditor.activeFocus
+                 && !hostField.activeFocus
+                 && !pinField.activeFocus
+                 && !displaySeek.activeFocus
+                 && !displaySpeed.activeFocus
+                 && !displayFontSize.activeFocus
+                 && !displayWidth.activeFocus
+                 && !remoteSeek.activeFocus
+                 && !remoteSpeed.activeFocus
+                 && !remoteFontSize.activeFocus
+                 && !remoteWidth.activeFocus
+        onActivated: session.setSpeed(Math.max(0, Math.min(600, session.speed - 10)))
+    }
+    Shortcut {
+        sequence: "Right"
+        context: Qt.WindowShortcut
+        enabled: !window.editingScript
+                 && !appearanceDialog.visible
+                 && !remoteScriptEditor.activeFocus
+                 && !hostField.activeFocus
+                 && !pinField.activeFocus
+                 && !displaySeek.activeFocus
+                 && !displaySpeed.activeFocus
+                 && !displayFontSize.activeFocus
+                 && !displayWidth.activeFocus
+                 && !remoteSeek.activeFocus
+                 && !remoteSpeed.activeFocus
+                 && !remoteFontSize.activeFocus
+                 && !remoteWidth.activeFocus
+        onActivated: session.setSpeed(Math.max(0, Math.min(600, session.speed + 10)))
+    }
 }

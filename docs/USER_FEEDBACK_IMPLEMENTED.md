@@ -78,3 +78,29 @@ This pass targets the first device tests and deliberately skips the app icon as 
 
 - Corrected the Qt 5.15.2 Android 6 CI job to run `make apk_install_target` after compiling. A plain `make` compiles the native application library but does not stage it under `android-build/libs/<abi>/`, where `androiddeployqt` expects it. The Qt 5.15 `apk_install_target` is used explicitly before the packaging command.
 - Kept the explicit `androiddeployqt` invocation after the staging target so the CI job can pin the Android SDK platform (`android-31`) and JDK path. The modern Qt 6 Android job and desktop/NixOS workflows are unchanged.
+
+
+# Editor, touch controls, and release audit — 2026-10-14
+
+## Implemented in source
+
+- The main editor now uses narrow phone margins and a single compact heading instead of spending two rows on title/help text. Its TextArea fills the remaining height and gets wider margins/larger text on desktop. Clear, Back, and Apply labels shorten on very narrow windows.
+- Display and remote tuning sliders are collapsed behind a `Tune` action below 760 px and each mode remembers its own expanded state. Display actions reflow into two columns on narrow phones. Remote nudge buttons, fullscreen/controls labels, margins, and editor height adapt to phone-sized layouts.
+- Corrected the floating glyphs' optical horizontal position by shifting the icons left independently; the button hit targets and dock positions remain unchanged.
+- Desktop Space toggles play/pause in both display and remote mode, except while a script/address/PIN field or modal appearance dialog is active. Left/right nudges do not steal arrow keys from the remote editor/connection fields. Escape exits fullscreen rather than unexpectedly resetting playback.
+- A completed tap on the Android reading surface toggles playback only while the display is in fullscreen. Normal-mode interactions and edit fields are not bound to that gesture.
+- Added a Linux per-user bundle installer/launcher/icon plus uninstall script, a tag-based draft-release job, stable Android release-key signing, and SHA-256 checksums. The release job deliberately stops if signing secrets are not configured rather than publishing debug-signed APKs as production releases.
+
+## Verification performed in the editing environment
+
+- The QML and workflow sources were edited and inspected locally, but Qt/QML runtime tools are not installed in this environment, so this pass has not been Qt-built or rendered on a device.
+- Shell syntax, workflow YAML syntax, archive packaging, and the existing dependency-free ScrollModel tests must all pass before treating the submitted source as ready. The Android fullscreen tap and exact icon alignment especially need confirmation on the same phone that previously exposed the issue.
+- Release keystore secrets must be configured on GitHub before pushing a release tag. The generic Linux bundle is not a universal AppImage and no Windows/macOS builds are added by this pass.
+
+
+# Keyboard navigation and speed controls — 2026-10-14
+
+- Up/Down now nudge the display reading position by 40 rendered pixels per press (Up rewinds the viewport; Down advances it). The authoritative display handles the request; in remote mode the same shortcuts are sent through the existing nudge command.
+- Left/Right now decrease/increase scrolling speed by 10 px/s per press, clamped to the UI slider's 0–600 px/s range. Remote speed changes use the existing speed command and are reflected by the host snapshot.
+- Shortcuts are disabled while editing, while the Appearance dialog is open, when host/PIN/script fields have focus, or when one of the tuning/progress sliders has focus. Space retains play/pause behavior.
+- Runtime verification still required: confirm key repeat behavior and directions with both device-role combinations, including while playback is running and near the beginning/end of the script.

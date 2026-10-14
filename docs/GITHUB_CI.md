@@ -41,13 +41,13 @@ The PR **Checks** summary/annotation panel is not the full step log. If the summ
 
 A successful workflow uploads these seven-day development artifacts:
 
-- `cueflow-linux-amd64`
-- `cueflow-linux-arm64`
+- `cueflow-linux-amd64` — Qt-deployed Linux bundle plus per-user installer and desktop launcher.
+- `cueflow-linux-arm64` — same bundle for aarch64.
 - `cueflow-android-arm64-debug` — modern Qt 6.12 / Android 9+ / arm64-v8a.
 - `cueflow-android6-armv7-legacy-debug` — Qt 5.15.2 / Android 6-compatible / armeabi-v7a; separate package ID.
 - `cueflow-nixos-x86_64`
 
-The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppImage and still expects compatible host system libraries plus a graphical session. In particular, a host may need `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). On NixOS, this tarball is not a drop-in portable package because it depends on the host's dynamic-library environment. The Android artifact is a debug-signed test APK (not the project’s permanent release-signing identity) and needs real-device testing. The NixOS artifact contains an exported Nix store closure; import it with the steps in `docs/NIXOS.md`.
+The Linux `.tar.gz` includes `AppRun`, an icon, `install.sh`, and `uninstall.sh`; run `./install.sh` from the extracted bundle for a per-user install. It is not an AppImage and still expects compatible host system libraries plus a graphical session. In particular, a host may need `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). On NixOS, this tarball is not a drop-in portable package because it depends on the host's dynamic-library environment. The Android artifacts produced by ordinary CI are debug-signed test APKs (not the project's permanent release-signing identity) and need real-device testing. The NixOS artifact contains an exported Nix store closure; import it with the steps in `docs/NIXOS.md`.
 
 ## Known limits
 
@@ -75,3 +75,8 @@ Android 6 is not supported by the current Qt 6.12 build (the modern artifact req
 ### Android 6 white-screen compatibility
 
 The Qt 5.15.2 job creates a generated copy of `qml/Main.qml` with explicit Qt 5 module import versions. Qt 6 allows versionless imports; Qt 5 requires version numbers. The qrc used by `android-legacy/CueFlow.pro` loads that generated file. The job stores the imports in `diagnostics/qt5-qml-compatibility.log`, and the native executable logs failed QML component creation to logcat.
+
+
+## User-facing releases
+
+Pushing a tag named `vMAJOR.MINOR.PATCH` runs the normal CI build matrix and then assembles a draft GitHub Release. The tag must match the version in `CMakeLists.txt`. The release job re-signs the modern and legacy APKs with a stable private key configured as repository Actions secrets, verifies their signatures and ZIP alignment, packages the NixOS store closure, and generates `SHA256SUMS`. It intentionally creates a draft: review and test assets before publishing. See `docs/RELEASING.md` for keystore setup, release commands, and platform support.

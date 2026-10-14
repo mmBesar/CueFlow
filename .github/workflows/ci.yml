@@ -100,7 +100,7 @@ jobs:
             libxcb-image0 libxcb-xinerama0 libx11-xcb1
 
       - name: Set up Python for Qt installer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -162,15 +162,27 @@ jobs:
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure
 
-      - name: Stage Qt application bundle
+      - name: Stage and package installable Linux bundle
         run: |
           set -euxo pipefail
           rm -rf stage
           cmake --install build --prefix "$PWD/stage"
-          tar -czf cueflow-linux-amd64.tar.gz -C stage .
+          source_version="$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            test "$version" = "$source_version" || {
+              echo "Release tag $GITHUB_REF_NAME does not match CMakeLists.txt version $source_version." >&2
+              exit 1
+            }
+          else
+            version="${source_version}-dev+${GITHUB_SHA:0:7}"
+          fi
+          ./scripts/package-linux-bundle.sh \
+            "$PWD/stage" "$PWD/cueflow-linux-amd64.tar.gz" \
+            "$version" "x86_64" "$GITHUB_SHA"
 
       - name: Upload Linux amd64 artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-linux-amd64
           path: cueflow-linux-amd64.tar.gz
@@ -179,7 +191,7 @@ jobs:
 
       - name: Upload Linux amd64 failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-linux-amd64-failure-diagnostics
           path: |
@@ -216,7 +228,7 @@ jobs:
             libxcb-image0 libxcb-xinerama0 libx11-xcb1
 
       - name: Set up Python for Qt installer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -278,15 +290,27 @@ jobs:
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure
 
-      - name: Stage Qt application bundle
+      - name: Stage and package installable Linux bundle
         run: |
           set -euxo pipefail
           rm -rf stage
           cmake --install build --prefix "$PWD/stage"
-          tar -czf cueflow-linux-arm64.tar.gz -C stage .
+          source_version="$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            test "$version" = "$source_version" || {
+              echo "Release tag $GITHUB_REF_NAME does not match CMakeLists.txt version $source_version." >&2
+              exit 1
+            }
+          else
+            version="${source_version}-dev+${GITHUB_SHA:0:7}"
+          fi
+          ./scripts/package-linux-bundle.sh \
+            "$PWD/stage" "$PWD/cueflow-linux-arm64.tar.gz" \
+            "$version" "aarch64" "$GITHUB_SHA"
 
       - name: Upload Linux arm64 artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-linux-arm64
           path: cueflow-linux-arm64.tar.gz
@@ -295,7 +319,7 @@ jobs:
 
       - name: Upload Linux arm64 failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-linux-arm64-failure-diagnostics
           path: |
@@ -342,7 +366,7 @@ jobs:
           "$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/ndk-build" --version
 
       - name: Set up Python for Qt installer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -477,7 +501,7 @@ jobs:
           cp "$apk" artifacts/CueFlow-android-arm64-debug.apk
 
       - name: Upload Android APK
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-android-arm64-debug
           path: artifacts/CueFlow-android-arm64-debug.apk
@@ -486,7 +510,7 @@ jobs:
 
       - name: Upload Android failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-android-failure-diagnostics
           path: |
@@ -726,7 +750,7 @@ jobs:
           cp "$apk" artifacts/CueFlow-android6-armv7-legacy-debug.apk
 
       - name: Upload Android 6 legacy APK
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-android6-armv7-legacy-debug
           path: artifacts/CueFlow-android6-armv7-legacy-debug.apk
@@ -735,7 +759,7 @@ jobs:
 
       - name: Upload legacy Android failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-android6-failure-diagnostics
           path: |
@@ -786,9 +810,192 @@ jobs:
           cat artifacts/build-info.txt
 
       - name: Upload NixOS store closure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cueflow-nixos-x86_64-${{ github.sha }}
           path: artifacts/**
           if-no-files-found: error
           retention-days: 7
+
+  publish-release:
+    name: Assemble signed draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - core-amd64
+      - core-arm64
+      - linux-amd64
+      - linux-arm64
+      - android-arm64
+      - android-legacy-armv7
+      - nixos-x86_64
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Download x86_64 Linux bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-linux-amd64
+          path: fetched/linux-amd64
+
+      - name: Download aarch64 Linux bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-linux-arm64
+          path: fetched/linux-arm64
+
+      - name: Download modern Android test APK
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-android-arm64-debug
+          path: fetched/android-arm64
+
+      - name: Download Android 6 legacy test APK
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-android6-armv7-legacy-debug
+          path: fetched/android6-armv7
+
+      - name: Download NixOS closure and build metadata
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-nixos-x86_64-${{ github.sha }}
+          path: fetched/nixos
+
+      - name: Verify release tag matches project version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          source_version="$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)"
+          flake_version="$(sed -nE 's/^[[:space:]]*version = "([0-9]+\.[0-9]+\.[0-9]+)";.*/\1/p' flake.nix | head -n1)"
+          [[ "$version" == "$source_version" ]] || {
+            printf 'Tag version %s does not match CMake version %s.\n' "$version" "$source_version" >&2
+            exit 1
+          }
+          [[ "$version" == "$flake_version" ]] || {
+            printf 'Tag version %s does not match flake version %s.\n' "$version" "$flake_version" >&2
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          mkdir -p release-assets
+          cp "fetched/linux-amd64/cueflow-linux-amd64.tar.gz" \
+            "release-assets/CueFlow-Linux-x86_64-${GITHUB_REF_NAME}.tar.gz"
+          cp "fetched/linux-arm64/cueflow-linux-arm64.tar.gz" \
+            "release-assets/CueFlow-Linux-aarch64-${GITHUB_REF_NAME}.tar.gz"
+          tar -czf "release-assets/CueFlow-NixOS-x86_64-${GITHUB_REF_NAME}.tar.gz" -C fetched/nixos .
+          cp docs/NIXOS.md "release-assets/CueFlow-NixOS-INSTALL-${GITHUB_REF_NAME}.md"
+
+      - name: Set up Java for APK signing tools
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android APK verification tools
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Install Android build-tools for release signing
+        run: |
+          set -euo pipefail
+          sdkmanager --install 'build-tools;36.0.0'
+
+      - name: Sign and verify release APKs
+        env:
+          CUEFLOW_ANDROID_KEYSTORE_BASE64: ${{ secrets.CUEFLOW_ANDROID_KEYSTORE_BASE64 }}
+          CUEFLOW_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.CUEFLOW_ANDROID_KEYSTORE_PASSWORD }}
+          CUEFLOW_ANDROID_KEY_ALIAS: ${{ secrets.CUEFLOW_ANDROID_KEY_ALIAS }}
+          CUEFLOW_ANDROID_KEY_PASSWORD: ${{ secrets.CUEFLOW_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for secret_name in \
+            CUEFLOW_ANDROID_KEYSTORE_BASE64 \
+            CUEFLOW_ANDROID_KEYSTORE_PASSWORD \
+            CUEFLOW_ANDROID_KEY_ALIAS \
+            CUEFLOW_ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret_name:-}" ]]; then
+              printf 'Missing required GitHub Actions secret: %s\n' "$secret_name" >&2
+              exit 1
+            fi
+          done
+
+          sdk_tools="$ANDROID_HOME/build-tools/36.0.0"
+          keystore="$RUNNER_TEMP/cueflow-release.jks"
+          printf '%s' "$CUEFLOW_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+
+          modern_input="$(find fetched/android-arm64 -type f -name '*.apk' -print -quit)"
+          legacy_input="$(find fetched/android6-armv7 -type f -name '*.apk' -print -quit)"
+          [[ -n "$modern_input" && -s "$modern_input" ]] || { echo 'Modern APK artifact is missing.' >&2; exit 1; }
+          [[ -n "$legacy_input" && -s "$legacy_input" ]] || { echo 'Legacy APK artifact is missing.' >&2; exit 1; }
+
+          modern_output="release-assets/CueFlow-Android-arm64-${GITHUB_REF_NAME}.apk"
+          legacy_output="release-assets/CueFlow-Android6-armv7-${GITHUB_REF_NAME}.apk"
+          "$sdk_tools/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias "$CUEFLOW_ANDROID_KEY_ALIAS" \
+            --ks-pass env:CUEFLOW_ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:CUEFLOW_ANDROID_KEY_PASSWORD \
+            --out "$modern_output" "$modern_input"
+          "$sdk_tools/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias "$CUEFLOW_ANDROID_KEY_ALIAS" \
+            --ks-pass env:CUEFLOW_ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:CUEFLOW_ANDROID_KEY_PASSWORD \
+            --out "$legacy_output" "$legacy_input"
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$modern_output"
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$legacy_output"
+          "$sdk_tools/zipalign" -c -P 16 -v 4 "$modern_output"
+          "$sdk_tools/zipalign" -c -v 4 "$legacy_output"
+          rm -f "$keystore"
+
+      - name: Generate checksums and release install notes
+        run: |
+          set -euo pipefail
+          cat > release-assets/CueFlow-INSTALL.txt <<'INSTALL'
+          CueFlow release downloads
+
+          Linux x86_64 / aarch64:
+            1. Download and extract the matching Linux .tar.gz archive.
+            2. Run ./install.sh from the extracted directory (no sudo required).
+            3. Launch CueFlow from your desktop application menu.
+            The generic Linux bundle still requires compatible host graphics drivers and system libraries.
+
+          Android:
+            Install CueFlow-Android-arm64 APK on Android 9+ arm64-v8a devices.
+            Use CueFlow-Android6-armv7 only for older 32-bit ARM devices (Android 5/API 21+).
+            Android APKs in this release are signed with the project's release key.
+
+          NixOS x86_64:
+            Download the NixOS closure archive and follow the accompanying NixOS install guide.
+            Do not use the generic Linux bundle as a NixOS package.
+
+          Verify downloaded files with SHA256SUMS.
+          INSTALL
+          sha256sum release-assets/CueFlow-* > release-assets/SHA256SUMS
+          cat release-assets/SHA256SUMS
+
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            CueFlow ${{ steps.version.outputs.version }} draft release. Review the generated assets and test them before publishing.
+
+            Linux archives include a per-user installer (`./install.sh`) and do not require sudo. Android APKs are signed with the configured release key. The NixOS archive is a separate exported store closure; follow its attached install guide.
+          files: |
+            release-assets/CueFlow-Linux-x86_64-${{ github.ref_name }}.tar.gz
+            release-assets/CueFlow-Linux-aarch64-${{ github.ref_name }}.tar.gz
+            release-assets/CueFlow-Android-arm64-${{ github.ref_name }}.apk
+            release-assets/CueFlow-Android6-armv7-${{ github.ref_name }}.apk
+            release-assets/CueFlow-NixOS-x86_64-${{ github.ref_name }}.tar.gz
+            release-assets/CueFlow-NixOS-INSTALL-${{ github.ref_name }}.md
+            release-assets/CueFlow-INSTALL.txt
+            release-assets/SHA256SUMS
