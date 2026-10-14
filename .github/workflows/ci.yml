@@ -574,6 +574,68 @@ jobs:
           test "$(java -version 2>&1 | head -n 1)" != ""
           printf 'JAVA_HOME=%s\n' "$JAVA_HOME"
 
+      - name: Prepare CueFlow Android package identity
+        run: |
+          set -euxo pipefail
+          # Qt 5.15/qmake does not provide the Qt 6 ANDROID_PACKAGE_NAME knob.
+          # Copy Qt's own version-matched package template, then set both the
+          # manifest package and Gradle applicationId to CueFlow's stable ID.
+          template_source="$QT_LEGACY_ROOT/src/android/templates"
+          template_dest="$GITHUB_WORKSPACE/android-legacy/package-template"
+          test -s "$template_source/AndroidManifest.xml"
+          test -s "$template_source/build.gradle"
+          test -s "$template_source/res/values/libs.xml"
+          rm -rf "$template_dest"
+          mkdir -p "$template_dest"
+          cp -a "$template_source/." "$template_dest/"
+          python3 - "$template_dest" <<'PYTHON'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          package = "org.mmbesar.cueflow.legacy"
+
+          manifest_path = root / "AndroidManifest.xml"
+          manifest = manifest_path.read_text(encoding="utf-8")
+          manifest, count = re.subn(
+              r'(<manifest\b[^>]*?\bpackage\s*=\s*["\'])[^"\']+(["\'])',
+              lambda match: match.group(1) + package + match.group(2),
+              manifest,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if count != 1:
+              raise SystemExit("Could not set the root manifest package attribute")
+          manifest_path.write_text(manifest, encoding="utf-8")
+
+          gradle_path = root / "build.gradle"
+          gradle = gradle_path.read_text(encoding="utf-8")
+          app_id = re.compile(r'(?m)^(\s*applicationId\s+)["\'][^"\']+["\']')
+          gradle, count = app_id.subn(lambda match: match.group(1) + '"' + package + '"', gradle)
+          if count == 0:
+              default_config = re.search(r'(?m)^\s*defaultConfig\s*\{', gradle)
+              if not default_config:
+                  raise SystemExit("Could not find defaultConfig block in Qt's build.gradle")
+              insert_at = default_config.end()
+              gradle = gradle[:insert_at] + '\n        applicationId "' + package + '"' + gradle[insert_at:]
+          elif count > 1:
+              raise SystemExit(f"Found {count} applicationId declarations; refusing ambiguous package setup")
+          gradle_path.write_text(gradle, encoding="utf-8")
+
+          # Validate both inputs before qmake/androiddeployqt can silently fall
+          # back to the generic org.qtproject.example application ID.
+          manifest_check = manifest_path.read_text(encoding="utf-8")
+          gradle_check = gradle_path.read_text(encoding="utf-8")
+          if not re.search(r'<manifest\b[^>]*\bpackage=["\']' + re.escape(package) + r'["\']', manifest_check, re.DOTALL):
+              raise SystemExit("Custom manifest package ID verification failed")
+          if not re.search(r'(?m)^\s*applicationId\s+["\']' + re.escape(package) + r'["\']', gradle_check):
+              raise SystemExit("Custom Gradle applicationId verification failed")
+          print(f"Prepared Android package identity: {package}")
+          PYTHON
+          grep -n 'package=' "$template_dest/AndroidManifest.xml"
+          grep -n 'applicationId' "$template_dest/build.gradle"
+
       - name: Configure legacy Android build
         run: |
           set -euxo pipefail
@@ -642,7 +704,12 @@ jobs:
           "$tools/zipalign" -c -v 4 "$apk" \
             2>&1 | tee diagnostics/qt5-zipalign-verify.log
           "$tools/aapt" dump badging "$apk" | tee diagnostics/qt5-apk-badging.txt
-          grep -q "package: name='org.mmbesar.cueflow.legacy'" diagnostics/qt5-apk-badging.txt
+          if ! grep -q "package: name='org.mmbesar.cueflow.legacy'" diagnostics/qt5-apk-badging.txt; then
+            echo 'Legacy APK has the wrong application ID; inspect the staged Qt package templates:' >&2
+            grep -n -E 'package=|applicationId' android-legacy/package-template/AndroidManifest.xml android-legacy/package-template/build.gradle 2>/dev/null || true
+            grep -n -E 'package=|applicationId' build-android6/android-build/AndroidManifest.xml build-android6/android-build/build.gradle 2>/dev/null || true
+            exit 1
+          fi
           grep -q "sdkVersion:'21'" diagnostics/qt5-apk-badging.txt
           mkdir -p artifacts
           cp "$apk" artifacts/CueFlow-android6-armv7-legacy-debug.apk

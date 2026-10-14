@@ -18,8 +18,17 @@ isEmpty(CUEFLOW_BUILD_COMMIT): CUEFLOW_BUILD_COMMIT = unknown
 DEFINES += CUEFLOW_BUILD_COMMIT=\\\"$$CUEFLOW_BUILD_COMMIT\\\"
 
 # Android 6 is API 23. Qt 5.15's supported minimum is Android 5/API 21.
-ANDROID_PACKAGE_NAME = org.mmbesar.cueflow.legacy
-ANDROID_VERSION_CODE = 101
+# Qt 5.15/qmake does not honor ANDROID_PACKAGE_NAME as a project variable.
+# Use a custom package template prepared from the exact Qt 5.15 installation
+# by CI. That template sets the real manifest package and Gradle applicationId.
+android {
+    ANDROID_PACKAGE_SOURCE_DIR = $$PWD/package-template
+    DISTFILES += \
+        $$PWD/package-template/AndroidManifest.xml \
+        $$PWD/package-template/build.gradle \
+        $$PWD/package-template/res/values/libs.xml
+}
+ANDROID_VERSION_CODE = 102
 ANDROID_VERSION_NAME = 0.1.0-legacy
 ANDROID_MIN_SDK_VERSION = 21
 ANDROID_TARGET_SDK_VERSION = 28
