@@ -14,6 +14,28 @@ repo_root="$(dirname -- "$script_dir")"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+# Each AppImage runner is a clean VM. Assert that both install the Qt XCB
+# dependency closure needed by linuxdeploy's ELF scanner (not just the desktop
+# build runner, which is a separate job).
+workflow="$repo_root/.github/workflows/ci.yml"
+check_appimage_job_dependencies() {
+    local start_job="$1" end_job="$2" job_text package
+    job_text="$(sed -n "/^  ${start_job}:/,/^  ${end_job}:/p" "$workflow")"
+    [[ -n "$job_text" ]] || die "Could not read workflow section $start_job"
+    local required_packages=(
+        libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
+        libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0
+        libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xinput0
+        libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0 libx11-xcb1
+    )
+    for package in "${required_packages[@]}"; do
+        grep -Fq "$package" <<<"$job_text" || die "$start_job does not install $package"
+    done
+    log "$start_job declares all Qt XCB scan dependencies"
+}
+check_appimage_job_dependencies appimage-amd64 appimage-arm64
+check_appimage_job_dependencies appimage-arm64 android-arm64
+
 case "$(uname -m)" in
     x86_64) arch=x86_64 ;;
     aarch64) arch=aarch64 ;;

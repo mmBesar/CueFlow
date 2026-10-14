@@ -348,14 +348,27 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Install host graphics libraries for dependency scanning
+      - name: Install host graphics and Qt XCB libraries for dependency scanning
         run: |
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             libegl1 libgl1 libglx0 libglvnd0 libopengl0 \
             libgbm1 libdrm2 libwayland-client0 libwayland-egl1 \
-            libwayland-cursor0 libwayland-server0 libxcb-glx0
+            libwayland-cursor0 libwayland-server0 \
+            libx11-6 libx11-xcb1 libxcb1 libxcb-glx0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xinput0 \
+            libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
+          # Fail early with a clear message instead of failing deep inside linuxdeploy.
+          ldconfig -p > "$RUNNER_TEMP/ldconfig-cache.txt"
+          for soname in libEGL.so.1 libxcb-cursor.so.0 libxcb-xkb.so.1 libxkbcommon-x11.so.0; do
+            if ! grep -Fq "$soname" "$RUNNER_TEMP/ldconfig-cache.txt"; then
+              echo "Required AppImage scan dependency is unavailable: $soname" >&2
+              exit 1
+            fi
+          done
 
       - name: Set up Python for Qt installer
         uses: actions/setup-python@v7
@@ -413,14 +426,27 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Install host graphics libraries for dependency scanning
+      - name: Install host graphics and Qt XCB libraries for dependency scanning
         run: |
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             libegl1 libgl1 libglx0 libglvnd0 libopengl0 \
             libgbm1 libdrm2 libwayland-client0 libwayland-egl1 \
-            libwayland-cursor0 libwayland-server0 libxcb-glx0
+            libwayland-cursor0 libwayland-server0 \
+            libx11-6 libx11-xcb1 libxcb1 libxcb-glx0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xinput0 \
+            libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
+          # Fail early with a clear message instead of failing deep inside linuxdeploy.
+          ldconfig -p > "$RUNNER_TEMP/ldconfig-cache.txt"
+          for soname in libEGL.so.1 libxcb-cursor.so.0 libxcb-xkb.so.1 libxkbcommon-x11.so.0; do
+            if ! grep -Fq "$soname" "$RUNNER_TEMP/ldconfig-cache.txt"; then
+              echo "Required AppImage scan dependency is unavailable: $soname" >&2
+              exit 1
+            fi
+          done
 
       - name: Set up Python for Qt installer
         uses: actions/setup-python@v7
