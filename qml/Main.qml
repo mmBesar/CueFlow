@@ -251,8 +251,14 @@ ApplicationWindow {
                 }
                 onClicked: {
                     if (session.remoteMode) {
-                        remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)
-                        Qt.callLater(function() { remoteScriptEditor.forceActiveFocus() })
+                        // A desktop remote session is a split workspace: focusing the
+                        // editor must never scroll its control sidebar out of view.
+                        if (window.desktopUi && window.width >= 900) {
+                            Qt.callLater(function() { remoteDesktopScriptEditor.forceActiveFocus() })
+                        } else {
+                            remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)
+                            Qt.callLater(function() { remoteScriptEditor.forceActiveFocus() })
+                        }
                     } else if (!window.editingScript) {
                         // Keep an existing draft intact; entering the editor must not
                         // silently discard text left from a previous editing session.
@@ -740,20 +746,27 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
-                    Layout.topMargin: 8
-                    Layout.bottomMargin: 8
+                    Layout.topMargin: 5
+                    Layout.bottomMargin: 6
+                    // Never let the desktop deck greedily consume the viewer area.
+                    // The taller limit is available only when narrow-window tuning is
+                    // explicitly expanded or the wide layout hosts connection details.
+                    Layout.maximumHeight: window.width >= 1020
+                                          ? (session.hosting ? 230 : 170)
+                                          : (window.displayTuningExpanded ? 310 : (session.hosting ? 190 : 150))
                     columns: window.width >= 1020 ? 2 : 1
-                    columnSpacing: 12
-                    rowSpacing: 8
+                    columnSpacing: 10
+                    rowSpacing: 6
 
                     Rectangle {
                         id: desktopPlaybackPanel
                         Layout.row: 0
                         Layout.column: 0
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.minimumWidth: 330
-                        Layout.preferredWidth: window.width >= 1020 ? Math.min(460, window.width * 0.40) : -1
+                        Layout.fillHeight: false
+                        Layout.alignment: Qt.AlignTop
+                        Layout.minimumWidth: window.width >= 1020 ? 330 : 0
+                        Layout.preferredWidth: window.width >= 1020 ? Math.min(420, window.width * 0.34) : -1
                         implicitHeight: desktopPlaybackContent.implicitHeight + 20
                         radius: 10
                         color: window.activePalette.mantle
@@ -776,6 +789,14 @@ ApplicationWindow {
                                     font.letterSpacing: 1.1
                                 }
                                 Item { Layout.fillWidth: true }
+                                Button {
+                                    visible: window.width < 1020
+                                    text: window.displayTuningExpanded ? "Hide tune" : "Tune"
+                                    implicitHeight: 26
+                                    padding: 6
+                                    font.pixelSize: 11
+                                    onClicked: window.displayTuningExpanded = !window.displayTuningExpanded
+                                }
                                 Rectangle {
                                     radius: 10
                                     color: session.playing ? window.activePalette.green : window.activePalette.surface0
@@ -820,12 +841,14 @@ ApplicationWindow {
                                 Button {
                                     id: remoteToggleDesktop
                                     Layout.fillWidth: true
-                                    Layout.minimumWidth: 132
-                                    Layout.preferredWidth: 152
+                                    Layout.minimumWidth: window.width < 520 ? 72 : 126
+                                    Layout.preferredWidth: window.width < 520 ? 90 : 146
                                     implicitHeight: 36
-                                    padding: 8
-                                    font.pixelSize: 12
-                                    text: session.hosting ? "Remote enabled" : "Enable remote"
+                                    padding: 7
+                                    font.pixelSize: window.width < 520 ? 11 : 12
+                                    text: session.hosting
+                                          ? (window.width < 520 ? "Remote ✓" : "Remote enabled")
+                                          : (window.width < 520 ? "Remote" : "Enable remote")
                                     ToolTip.text: session.hosting ? "Remote control is active — click to stop it" : "Enable remote control from another device"
                                     highlighted: session.hosting
                                     background: Rectangle {
@@ -890,9 +913,11 @@ ApplicationWindow {
                         Layout.row: window.width >= 1020 ? 0 : 1
                         Layout.column: window.width >= 1020 ? 1 : 0
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Layout.fillHeight: false
+                        Layout.alignment: Qt.AlignTop
                         Layout.minimumWidth: 0
-                        implicitHeight: desktopTuningContent.implicitHeight + 20
+                        visible: window.width >= 1020 || window.displayTuningExpanded
+                        implicitHeight: desktopTuningContent.implicitHeight + 16
                         radius: 10
                         color: window.activePalette.mantle
                         border.color: window.activePalette.surface1
@@ -1024,11 +1049,11 @@ ApplicationWindow {
 
                     Rectangle {
                         id: desktopSessionInfo
-                        Layout.row: window.width >= 1020 ? 1 : 2
+                        Layout.row: window.width >= 1020 ? 1 : (window.displayTuningExpanded ? 2 : 1)
                         Layout.column: 0
                         Layout.columnSpan: desktopDisplayControls.columns
                         Layout.fillWidth: true
-                        visible: session.hosting || session.status.length > 0
+                        visible: session.hosting
                         radius: 8
                         color: window.activePalette.mantle
                         border.color: window.activePalette.surface1
@@ -1274,10 +1299,437 @@ ApplicationWindow {
             Layout.fillHeight: true
             visible: session.remoteMode
 
+            // Desktop remote workspace: the control sidebar is fixed beside the
+            // script editor, so opening/focusing the editor cannot hide transport controls.
+            ColumnLayout {
+                id: remoteDesktopLayout
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 10
+                visible: window.desktopUi && window.width >= 900
+                onVisibleChanged: {
+                    // Rehydrate the desktop editor when switching back from the
+                    // compact page, but avoid mirroring keystrokes into a hidden TextArea.
+                    if (visible && remoteDesktopScriptEditor.text !== session.draftScript) {
+                        remoteDesktopScriptEditor.syncingDraft = true
+                        remoteDesktopScriptEditor.text = session.draftScript
+                        remoteDesktopScriptEditor.syncingDraft = false
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Label {
+                        text: "Remote"
+                        font.pixelSize: 20
+                        font.bold: true
+                        color: window.activePalette.text
+                    }
+                    Label {
+                        text: session.connected ? "Connected to display" : "Connect to a display, then control playback here"
+                        color: window.activePalette.subtext1
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        radius: 10
+                        color: session.connected ? window.activePalette.green : window.activePalette.surface0
+                        implicitWidth: remoteDesktopStatus.implicitWidth + 18
+                        implicitHeight: 24
+                        Label {
+                            id: remoteDesktopStatus
+                            anchors.centerIn: parent
+                            text: session.connected ? "CONNECTED" : "NOT CONNECTED"
+                            color: session.connected ? window.contrastingText(window.activePalette.green) : window.activePalette.subtext1
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+
+                RowLayout {
+                    id: remoteDesktopWorkspace
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 12
+
+                    Frame {
+                        id: remoteDesktopControlPanel
+                        Layout.preferredWidth: 340
+                        Layout.minimumWidth: 300
+                        Layout.maximumWidth: 380
+                        Layout.fillHeight: true
+                        background: Rectangle {
+                            color: window.activePalette.mantle
+                            radius: 12
+                            border.color: window.activePalette.surface1
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 9
+
+                            Label {
+                                text: session.connected ? "DISPLAY CONTROLS" : "CONNECT TO DISPLAY"
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 1.0
+                                color: window.activePalette.subtext0
+                            }
+
+                            ColumnLayout {
+                                visible: !session.connected
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    text: "Enter the display device's LAN address and PIN."
+                                    color: window.activePalette.subtext1
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                    font.pixelSize: 12
+                                }
+                                TextField {
+                                    id: remoteDesktopHostField
+                                    Layout.fillWidth: true
+                                    implicitHeight: 36
+                                    font.pixelSize: 12
+                                    placeholderText: "Display address (e.g. 192.168.1.25)"
+                                    text: session.hostAddress
+                                    onTextEdited: session.setHostAddress(text)
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    TextField {
+                                        id: remoteDesktopPinField
+                                        Layout.fillWidth: true
+                                        Layout.maximumWidth: 150
+                                        implicitHeight: 36
+                                        font.pixelSize: 12
+                                        placeholderText: "PIN"
+                                        maximumLength: 4
+                                        inputMethodHints: Qt.ImhDigitsOnly
+                                    }
+                                    Button {
+                                        text: "Connect"
+                                        implicitHeight: 36
+                                        padding: 10
+                                        font.pixelSize: 12
+                                        highlighted: true
+                                        onClicked: session.connectToHost(remoteDesktopHostField.text, remoteDesktopPinField.text)
+                                    }
+                                }
+                                Label {
+                                    visible: session.status.length > 0
+                                    text: session.status
+                                    color: window.activePalette.subtext1
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            ColumnLayout {
+                                id: remoteDesktopConnectedControls
+                                visible: session.connected
+                                Layout.fillWidth: true
+                                spacing: 9
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 5
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: "−20"
+                                        ToolTip.text: "Move back 20 pixels (hold for 60)"
+                                        implicitHeight: 36
+                                        padding: 5
+                                        font.pixelSize: 12
+                                        onClicked: session.nudgePixels(-20)
+                                        onPressAndHold: session.nudgePixels(-60)
+                                    }
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: session.playing ? "Pause" : "Play"
+                                        implicitHeight: 36
+                                        padding: 5
+                                        font.pixelSize: 12
+                                        highlighted: true
+                                        onClicked: session.togglePlayback()
+                                    }
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: "+20"
+                                        ToolTip.text: "Move forward 20 pixels (hold for 60)"
+                                        implicitHeight: 36
+                                        padding: 5
+                                        font.pixelSize: 12
+                                        onClicked: session.nudgePixels(20)
+                                        onPressAndHold: session.nudgePixels(60)
+                                    }
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: "Reset"
+                                        implicitHeight: 36
+                                        padding: 5
+                                        font.pixelSize: 11
+                                        onClicked: session.resetPlayback()
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: session.viewerFullscreen ? "Exit fullscreen" : "Fullscreen"
+                                        implicitHeight: 32
+                                        padding: 5
+                                        font.pixelSize: 11
+                                        ToolTip.text: "Toggle fullscreen on the display device"
+                                        onClicked: session.requestViewerFullscreenToggle()
+                                    }
+                                    Button {
+                                        Layout.fillWidth: true
+                                        text: session.viewerControlsVisible ? "Hide controls" : "Show controls"
+                                        implicitHeight: 32
+                                        padding: 5
+                                        font.pixelSize: 11
+                                        ToolTip.text: "Show or hide the display controls"
+                                        onClicked: session.requestViewerControlsToggle()
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Label { text: "Position"; color: window.activePalette.subtext1; font.pixelSize: 12 }
+                                    Item { Layout.fillWidth: true }
+                                    Label { text: Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                }
+                                Slider {
+                                    id: remoteDesktopSeek
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 26
+                                    Layout.minimumHeight: 24
+                                    from: 0; to: 1; stepSize: 0.0001
+                                    Binding { target: remoteDesktopSeek; property: "value"; value: session.progress; when: !remoteDesktopSeek.pressed }
+                                    onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
+                                    onMoved: session.seekTo(value)
+                                    WheelHandler {
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: function(event) {
+                                            const direction = window.wheelDirection(event)
+                                            if (direction !== 0) {
+                                                session.beginSeek()
+                                                session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)) )
+                                                session.endSeek()
+                                                event.accepted = true
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle { Layout.fillWidth: true; height: 1; color: window.activePalette.surface1 }
+                                Label {
+                                    text: "READING ADJUSTMENTS"
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 0.8
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Label { text: "Speed"; color: window.activePalette.text; font.pixelSize: 12; Layout.preferredWidth: 66 }
+                                    Slider {
+                                        id: remoteDesktopSpeed
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 24
+                                        Layout.minimumHeight: 22
+                                        from: 0; to: 600; stepSize: 1
+                                        Binding { target: remoteDesktopSpeed; property: "value"; value: session.speed; when: !remoteDesktopSpeed.pressed }
+                                        onMoved: session.setSpeed(value)
+                                    }
+                                    Label { text: Math.round(session.speed); color: window.activePalette.subtext1; font.pixelSize: 11; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 34 }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Label { text: "Text size"; color: window.activePalette.text; font.pixelSize: 12; Layout.preferredWidth: 66 }
+                                    Slider {
+                                        id: remoteDesktopFontSize
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 24
+                                        Layout.minimumHeight: 22
+                                        from: 12; to: 100; stepSize: 1
+                                        Binding { target: remoteDesktopFontSize; property: "value"; value: session.fontSize; when: !remoteDesktopFontSize.pressed }
+                                        onMoved: session.setFontSize(value)
+                                    }
+                                    Label { text: session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: 11; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 34 }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Label { text: "Text width"; color: window.activePalette.text; font.pixelSize: 12; Layout.preferredWidth: 66 }
+                                    Slider {
+                                        id: remoteDesktopWidth
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 24
+                                        Layout.minimumHeight: 22
+                                        from: 35; to: 100; stepSize: 1
+                                        Binding { target: remoteDesktopWidth; property: "value"; value: session.textWidth; when: !remoteDesktopWidth.pressed }
+                                        onMoved: session.setTextWidth(value)
+                                    }
+                                    Label { text: session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: 11; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 34 }
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true; Layout.minimumHeight: 0 }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: window.activePalette.surface1 }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: session.connected
+                                Label {
+                                    text: session.status
+                                    color: window.activePalette.subtext0
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: 10
+                                    Layout.fillWidth: true
+                                }
+                                Button {
+                                    text: "Disconnect"
+                                    implicitHeight: 30
+                                    padding: 7
+                                    font.pixelSize: 11
+                                    onClicked: session.disconnectSession()
+                                }
+                            }
+                        }
+                    }
+
+                    Frame {
+                        id: remoteDesktopEditorPanel
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: 320
+                        background: Rectangle {
+                            color: window.activePalette.mantle
+                            radius: 12
+                            border.color: window.activePalette.surface1
+                        }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label {
+                                    text: "SCRIPT"
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.0
+                                }
+                                Item { Layout.fillWidth: true }
+                                Label {
+                                    text: session.connected ? "Ready to send" : "Draft · not connected"
+                                    color: window.activePalette.subtext1
+                                    font.pixelSize: 11
+                                }
+                            }
+                            ScrollView {
+                                id: remoteDesktopScriptScroll
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.minimumHeight: 200
+                                padding: 0
+                                background: Rectangle {
+                                    color: window.activePalette.base
+                                    radius: 8
+                                    border.color: remoteDesktopScriptEditor.activeFocus ? window.accentColor : window.activePalette.surface1
+                                }
+                                clip: true
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                TextArea {
+                                    id: remoteDesktopScriptEditor
+                                    property bool syncingDraft: false
+                                    width: remoteDesktopScriptScroll.availableWidth
+                                    text: session.draftScript
+                                    wrapMode: TextEdit.Wrap
+                                    placeholderText: "Write or paste your Markdown script here…"
+                                    placeholderTextColor: window.activePalette.overlay1
+                                    font.family: "monospace"
+                                    font.pixelSize: 14
+                                    leftPadding: 14
+                                    rightPadding: 14
+                                    topPadding: 18
+                                    bottomPadding: 12
+                                    textMargin: 0
+                                    verticalAlignment: TextEdit.AlignTop
+                                    clip: true
+                                    selectByMouse: true
+                                    persistentSelection: true
+                                    background: null
+                                    onTextChanged: {
+                                        if (!syncingDraft)
+                                            session.setDraftScript(text)
+                                    }
+                                    Connections {
+                                        target: session
+                                        function onDraftScriptChanged() {
+                                            if (remoteDesktopLayout.visible && !remoteDesktopScriptEditor.activeFocus && remoteDesktopScriptEditor.text !== session.draftScript) {
+                                                remoteDesktopScriptEditor.syncingDraft = true
+                                                remoteDesktopScriptEditor.text = session.draftScript
+                                                remoteDesktopScriptEditor.syncingDraft = false
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Button {
+                                    text: "Clear"
+                                    implicitHeight: 34
+                                    padding: 10
+                                    font.pixelSize: 12
+                                    onClicked: {
+                                        remoteDesktopScriptEditor.text = ""
+                                        remoteDesktopScriptEditor.forceActiveFocus()
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                Button {
+                                    text: "Send script to display"
+                                    enabled: session.connected
+                                    implicitHeight: 34
+                                    padding: 10
+                                    font.pixelSize: 12
+                                    highlighted: true
+                                    onClicked: session.sendDraftScript()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Flickable {
                 id: remoteFlick
                 anchors.fill: parent
+                visible: !(window.desktopUi && window.width >= 900)
                 clip: true
+                onVisibleChanged: {
+                    // Keep the stacked/mobile editor current when switching from the
+                    // wide desktop editor without syncing a hidden duplicate every keystroke.
+                    if (visible && remoteScriptEditor.text !== session.draftScript) {
+                        remoteScriptEditor.syncingDraft = true
+                        remoteScriptEditor.text = session.draftScript
+                        remoteScriptEditor.syncingDraft = false
+                    }
+                }
                 contentWidth: width
                 contentHeight: remoteContent.height + remoteContent.y + remoteContent.contentMargin
                 boundsBehavior: Flickable.StopAtBounds
@@ -1604,7 +2056,7 @@ ApplicationWindow {
                                 Connections {
                                     target: session
                                     function onDraftScriptChanged() {
-                                        if (!remoteScriptEditor.activeFocus && remoteScriptEditor.text !== session.draftScript) {
+                                        if (remoteFlick.visible && !remoteScriptEditor.activeFocus && remoteScriptEditor.text !== session.draftScript) {
                                             remoteScriptEditor.syncingDraft = true
                                             remoteScriptEditor.text = session.draftScript
                                             remoteScriptEditor.syncingDraft = false
@@ -1758,6 +2210,13 @@ ApplicationWindow {
                  && !window.editingScript
                  && !appearanceDialog.visible
                  && !remoteScriptEditor.activeFocus
+                 && !remoteDesktopScriptEditor.activeFocus
+                 && !remoteDesktopHostField.activeFocus
+                 && !remoteDesktopPinField.activeFocus
+                 && !remoteDesktopSeek.activeFocus
+                 && !remoteDesktopSpeed.activeFocus
+                 && !remoteDesktopFontSize.activeFocus
+                 && !remoteDesktopWidth.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
                  && !displaySeek.activeFocus && !displaySpeed.activeFocus
@@ -1790,6 +2249,13 @@ ApplicationWindow {
         enabled: !window.editingScript
                  && !appearanceDialog.visible
                  && !remoteScriptEditor.activeFocus
+                 && !remoteDesktopScriptEditor.activeFocus
+                 && !remoteDesktopHostField.activeFocus
+                 && !remoteDesktopPinField.activeFocus
+                 && !remoteDesktopSeek.activeFocus
+                 && !remoteDesktopSpeed.activeFocus
+                 && !remoteDesktopFontSize.activeFocus
+                 && !remoteDesktopWidth.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
                  && !displaySeek.activeFocus
@@ -1812,6 +2278,13 @@ ApplicationWindow {
         enabled: !window.editingScript
                  && !appearanceDialog.visible
                  && !remoteScriptEditor.activeFocus
+                 && !remoteDesktopScriptEditor.activeFocus
+                 && !remoteDesktopHostField.activeFocus
+                 && !remoteDesktopPinField.activeFocus
+                 && !remoteDesktopSeek.activeFocus
+                 && !remoteDesktopSpeed.activeFocus
+                 && !remoteDesktopFontSize.activeFocus
+                 && !remoteDesktopWidth.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
                  && !displaySeek.activeFocus
@@ -1834,6 +2307,13 @@ ApplicationWindow {
         enabled: !window.editingScript
                  && !appearanceDialog.visible
                  && !remoteScriptEditor.activeFocus
+                 && !remoteDesktopScriptEditor.activeFocus
+                 && !remoteDesktopHostField.activeFocus
+                 && !remoteDesktopPinField.activeFocus
+                 && !remoteDesktopSeek.activeFocus
+                 && !remoteDesktopSpeed.activeFocus
+                 && !remoteDesktopFontSize.activeFocus
+                 && !remoteDesktopWidth.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
                  && !displaySeek.activeFocus
@@ -1856,6 +2336,13 @@ ApplicationWindow {
         enabled: !window.editingScript
                  && !appearanceDialog.visible
                  && !remoteScriptEditor.activeFocus
+                 && !remoteDesktopScriptEditor.activeFocus
+                 && !remoteDesktopHostField.activeFocus
+                 && !remoteDesktopPinField.activeFocus
+                 && !remoteDesktopSeek.activeFocus
+                 && !remoteDesktopSpeed.activeFocus
+                 && !remoteDesktopFontSize.activeFocus
+                 && !remoteDesktopWidth.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
                  && !displaySeek.activeFocus

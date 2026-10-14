@@ -113,3 +113,13 @@ This pass targets the first device tests and deliberately skips the app icon as 
 - Increased desktop mode-tab and form-control sizing while keeping Android sizing branches unchanged. Remote-mode action buttons now use normal desktop button heights instead of 24px controls.
 - Added a dependency-free structural QML regression check to both core CI jobs, covering balanced delimiters, unique IDs, required desktop labels/layout, and preserved Android touch sizing.
 - Local validation: the new UI structural test, ScrollModel tests, Linux package validation test, mocked AppImage packaging test, core-only CMake build, and CTest pass. The available environment lacks Qt/QML runtime tools, so the revised UI still needs a real Qt build and visual check on desktop; Android's branch should also be smoke-tested after CI.
+
+
+# Desktop workspace redesign — 2026-10-15
+
+- The display control deck now has a bounded height rather than stretching playback/tuning panels vertically. On wide windows it stays around the content's natural 150–230px height, leaving the reading scene dominant. Tuning is visible beside playback on wide windows and collapses behind a Tune action on narrower desktop windows; explicitly expanding tuning allows a taller deck. The optional session-info row appears only while hosting.
+- Wide desktop Remote mode now uses a persistent split workspace: a fixed-width sidebar for connection, playback, nudge, seek, fullscreen/control visibility, speed, font size, and text width; a separate script editor fills the remaining width. This keeps the transport controls visible while writing or focusing the script and avoids scrolling the control panel out of view.
+- The header Edit action now focuses the side-by-side desktop editor without moving the remote page scroll position. Narrow/mobile remote mode retains its scrollable single-column page.
+- Keyboard shortcuts explicitly yield to the new desktop script editor, host/PIN inputs, and remote sliders, so Space/arrow controls do not hijack text entry or slider interaction.
+- Research reference: the layout follows Qt Quick's responsive-layout guidance by reorganizing panels at a width breakpoint, and uses the established teleprompter pattern of persistent controls beside a separate script/editor area (for comparison, see Qt's responsive layouts documentation and the open-source LocalCue desktop control workflow).
+- Local validation: QML delimiter/unique-ID structural checks, desktop-UI regression checks, ScrollModel tests, core-only CMake build, and CTest pass. Qt/QML runtime tools are not installed in the editing environment, so the full Qt GUI must still be built and visually checked in CI/on desktop; no claim is made that a screenshot or live GUI test was produced here.
