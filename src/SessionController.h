@@ -149,6 +149,7 @@ private:
     QTimer settingsSaveTimer_;
     QElapsedTimer frameClock_;
     QElapsedTimer broadcastClock_;
+    QElapsedTimer pairingLockoutClock_;
     QString script_;
     QString draftScript_;
     QString status_ = QStringLiteral("Ready");
@@ -167,4 +168,5 @@ private:
     bool scrubbing_ = false;
     bool resumeAfterSeek_ = false;
     bool draftDirty_ = false;
+    int failedPairingAttempts_ = 0;
 };

@@ -16,7 +16,7 @@ Build a clean native-first application using Qt 6 / Qt Quick (QML) with a small 
 - Start/stop a temporary LAN control session only when requested.
 
 ### Remote
-- Connect by LAN address + short pairing PIN; QR and mDNS service discovery follow after the protocol stabilizes.
+- Connect by LAN address + stable four-digit pairing PIN (30-second cooldown after five failures); QR and mDNS service discovery follow after the protocol stabilizes.
 - Play/pause/reset, live scrub, press-and-hold precision nudges, speed, font size, and width.
 - Edit/paste Markdown and explicitly send it to the display.
 - Mirror authoritative playback state from the display; the remote does not independently simulate scrolling.
@@ -36,11 +36,11 @@ Do not claim perfect Arabic/BiDi support until this has been tested visually on 
 ## Device-to-device session protocol
 
 - Display opens a TCP listener only when explicitly enabled.
-- Pairing uses a six-digit PIN. In the prototype it remains valid until hosting is stopped; expiration and failed-attempt throttling are not implemented yet.
+- Pairing uses a four-digit PIN for easier phone entry. It remains stable until hosting is stopped, with a 30-second cooldown after five failed attempts. The TCP transport is still unencrypted, so use only on a trusted LAN.
 - JSON messages are newline-delimited and size limited. A client must authenticate before sending commands; only one remote is accepted initially.
 - The display owns playback state and is the source of truth. Progress updates are coalesced; script text is sent only at pairing or when replaced, not on every frame.
 - Initial transport is plaintext for trusted LAN prototyping. Do not forward the port publicly. Before recommending use on untrusted networks, implement TLS with certificate verification/pinning or an authenticated encrypted transport.
-- Current manual pairing is intentionally a simple first milestone. The next milestone should add PIN expiration and failed-attempt throttling, then QR pairing, IPv4/IPv6 handling, and mDNS discovery where the network allows multicast.
+- Current manual pairing is intentionally a simple first milestone. The next milestone should add optional PIN expiry, QR pairing, IPv4/IPv6 handling, and mDNS discovery where the network allows multicast.
 
 ## Milestones
 

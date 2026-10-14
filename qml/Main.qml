@@ -17,6 +17,7 @@ ApplicationWindow {
     property bool editingScript: false
     // Only the small floating buttons auto-hide; the main controls stay visible.
     property bool overlayControlsVisible: true
+    property bool displayControlsVisible: true
     property var flavorNames: ["Latte", "Frappé", "Macchiato", "Mocha"]
     property var accentNames: [
         "Rosewater", "Flamingo", "Pink", "Mauve", "Red", "Maroon",
@@ -117,10 +118,12 @@ ApplicationWindow {
 
     onVisibilityChanged: {
         if (visibility === Window.FullScreen) {
+            displayControlsVisible = true
             revealControls()
         } else {
             controlsHideTimer.stop()
             overlayControlsVisible = true
+            displayControlsVisible = true
         }
     }
 
@@ -181,6 +184,7 @@ ApplicationWindow {
             }
             Item { Layout.fillWidth: true }
             Rectangle {
+                visible: window.width > 480
                 radius: 12
                 color: session.connected ? window.activePalette.green : session.hosting ? window.activePalette.surface1 : window.activePalette.surface0
                 implicitHeight: 30
@@ -193,6 +197,64 @@ ApplicationWindow {
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
                 }
+            }
+            Button {
+                text: session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit")
+                implicitHeight: 38
+                implicitWidth: 66
+                padding: 6
+                ToolTip.visible: hovered
+                ToolTip.text: session.remoteMode ? "Edit or send a script" : (window.editingScript ? "Return to reading" : "Edit script")
+                contentItem: Item {
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 5
+                    Item {
+                        width: 14; height: 16
+                        visible: session.remoteMode || !window.editingScript
+                        Rectangle {
+                            x: 5; y: 1; width: 4; height: 12
+                            rotation: 42
+                            radius: 1
+                            color: window.accentColor
+                        }
+                        Rectangle {
+                            x: 2; y: 11; width: 5; height: 3
+                            rotation: 42
+                            radius: 1
+                            color: window.activePalette.text
+                        }
+                    }
+                    Item {
+                        width: 14; height: 16
+                        visible: !session.remoteMode && window.editingScript
+                        Rectangle { x: 2; y: 7; width: 10; height: 2; color: window.activePalette.text }
+                        Rectangle { x: 2; y: 4; width: 5; height: 2; rotation: -45; color: window.activePalette.text }
+                        Rectangle { x: 2; y: 10; width: 5; height: 2; rotation: 45; color: window.activePalette.text }
+                    }
+                    Text {
+                        text: session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit")
+                        color: window.activePalette.text
+                        font.pixelSize: 14
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    }
+                }
+                onClicked: {
+                    if (session.remoteMode) {
+                        remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)
+                        Qt.callLater(function() { remoteScriptEditor.forceActiveFocus() })
+                    } else if (!window.editingScript) {
+                        // Keep an existing draft intact; entering the editor must not
+                        // silently discard text left from a previous editing session.
+                        window.editingScript = true
+                        controlsHideTimer.stop()
+                    } else {
+                        window.editingScript = false
+                        window.revealControls()
+                    }
+                }
+                background: Rectangle { radius: 10; color: window.activePalette.surface0 }
             }
             Button {
                 text: "⚙"
@@ -427,47 +489,64 @@ ApplicationWindow {
                             }
                         }
 
-                        Row {
+                        Column {
+                            id: displayOverlayDock
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 8
                             spacing: 6
                             z: 5
-                            visible: window.overlayControlsVisible
+                            visible: !window.editingScript
+                            opacity: window.visibility === Window.FullScreen && !window.overlayControlsVisible ? 0.16 : 1.0
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
 
+                            // Keep the faded dock hit-testable in fullscreen. The
+                            // controls button itself remains available, so users never
+                            // need a special gesture to recover hidden controls.
                             Button {
-                                implicitWidth: 34; implicitHeight: 34; padding: 0
-                                text: window.visibility === Window.FullScreen ? "⛶" : "⤢"
+                                implicitWidth: 36; implicitHeight: 36; padding: 0
                                 ToolTip.visible: hovered
-                                ToolTip.text: window.visibility === Window.FullScreen ? "Exit fullscreen" : "Fullscreen"
+                                ToolTip.text: window.visibility === Window.FullScreen ? "Exit fullscreen" : "Enter fullscreen"
+                                onPressed: window.revealControls()
                                 onClicked: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
-                                contentItem: Text { text: parent.text; color: window.activePalette.text; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.94; border.color: window.activePalette.surface1 }
-                            }
-                            Button {
-                                implicitWidth: 34; implicitHeight: 34; padding: 0
-                                visible: window.visibility !== Window.FullScreen
-                                text: window.editingScript ? "↩" : "✎"
-                                ToolTip.visible: hovered
-                                ToolTip.text: window.editingScript ? "Return to display" : "Edit Markdown"
-                                onClicked: {
-                                    if (!window.editingScript)
-                                        session.setDraftScript(session.script)
-                                    window.editingScript = !window.editingScript
-                                    if (window.editingScript) controlsHideTimer.stop()
-                                    else window.revealControls()
+                                background: Rectangle { radius: 11; color: window.activePalette.mantle; opacity: 0.92; border.color: window.activePalette.surface1 }
+                                contentItem: Item {
+                                    // Draw both states with shapes instead of font glyphs,
+                                    // which were showing as missing-character boxes.
+                                    readonly property color iconColor: window.activePalette.text
+                                    readonly property bool isFullscreen: window.visibility === Window.FullScreen
+                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 9; width: 8; height: 2; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 9; width: 2; height: 8; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 19; y: 9; width: 8; height: 2; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 25; y: 9; width: 2; height: 8; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 25; width: 8; height: 2; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 19; width: 2; height: 8; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 19; y: 25; width: 8; height: 2; color: parent.iconColor }
+                                    Rectangle { visible: !parent.isFullscreen; x: 25; y: 19; width: 2; height: 8; color: parent.iconColor }
+                                    Rectangle { visible: parent.isFullscreen; x: 8; y: 8; width: 20; height: 20; radius: 2; color: "transparent"; border.width: 2; border.color: parent.iconColor }
+                                    Rectangle { visible: parent.isFullscreen; x: 8; y: 8; width: 20; height: 3; color: parent.iconColor }
                                 }
-                                contentItem: Text { text: parent.text; color: window.activePalette.text; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.94; border.color: window.activePalette.surface1 }
                             }
                             Button {
-                                implicitWidth: 34; implicitHeight: 34; padding: 0
-                                text: "◐"
+                                visible: window.visibility === Window.FullScreen
+                                implicitWidth: 36; implicitHeight: 36; padding: 0
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Appearance"
-                                onClicked: appearanceDialog.open()
-                                contentItem: Text { text: parent.text; color: window.accentColor; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.94; border.color: window.activePalette.surface1 }
+                                ToolTip.text: window.displayControlsVisible ? "Hide controls" : "Show controls"
+                                onPressed: window.revealControls()
+                                onClicked: {
+                                    window.displayControlsVisible = !window.displayControlsVisible
+                                    window.revealControls()
+                                }
+                                background: Rectangle { radius: 11; color: window.activePalette.mantle; opacity: 0.92; border.color: window.activePalette.surface1 }
+                                contentItem: Item {
+                                    // Three compact, custom-drawn slider tracks.
+                                    Rectangle { x: 8; y: 10; width: 20; height: 2; radius: 1; color: window.activePalette.text }
+                                    Rectangle { x: 8; y: 17; width: 20; height: 2; radius: 1; color: window.activePalette.text }
+                                    Rectangle { x: 8; y: 24; width: 20; height: 2; radius: 1; color: window.activePalette.text }
+                                    Rectangle { x: 13; y: 7; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
+                                    Rectangle { x: 20; y: 14; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
+                                    Rectangle { x: 11; y: 21; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
+                                }
                             }
                         }
                     }
@@ -482,20 +561,43 @@ ApplicationWindow {
                             Label { text: "Markdown • Arabic + English • stored locally"; color: window.activePalette.subtext0 }
                             TextArea {
                                 id: scriptEditor
+                                property bool syncingDraft: false
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Binding { target: scriptEditor; property: "text"; value: session.draftScript; when: !scriptEditor.activeFocus }
+                                text: session.draftScript
                                 placeholderText: "Write your Markdown script here…"
                                 wrapMode: TextEdit.Wrap
                                 font.family: "monospace"
                                 font.pixelSize: 16
-                                onTextChanged: session.setDraftScript(text)
+                                onTextChanged: {
+                                    if (!syncingDraft)
+                                        session.setDraftScript(text)
+                                }
+                                Connections {
+                                    target: session
+                                    function onDraftScriptChanged() {
+                                        // Never replace active user input. Update only when
+                                        // a new authoritative draft arrives while unfocused.
+                                        if (!scriptEditor.activeFocus && scriptEditor.text !== session.draftScript) {
+                                            scriptEditor.syncingDraft = true
+                                            scriptEditor.text = session.draftScript
+                                            scriptEditor.syncingDraft = false
+                                        }
+                                    }
+                                }
                                 background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
+                                Button {
+                                    text: "Clear"
+                                    onClicked: {
+                                        scriptEditor.text = ""
+                                        scriptEditor.forceActiveFocus()
+                                    }
+                                }
                                 Item { Layout.fillWidth: true }
-                                Button { text: "Cancel"; onClicked: { window.editingScript = false; window.revealControls() } }
+                                Button { text: "Back to reading"; onClicked: { window.editingScript = false; window.revealControls() } }
                                 Button {
                                     text: "Apply script"
                                     highlighted: true
@@ -510,9 +612,14 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle { Layout.fillWidth: true; height: 1; color: window.activePalette.surface1; visible: !window.editingScript }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: window.activePalette.surface1
+                    visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                }
                 ColumnLayout {
-                    visible: !window.editingScript
+                    visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
                     Layout.fillWidth: true
                     Layout.leftMargin: 10
                     Layout.rightMargin: 10
@@ -702,8 +809,8 @@ ApplicationWindow {
                             id: pinField
                             Layout.fillWidth: true
                             Layout.maximumWidth: 220
-                            placeholderText: "6-digit PIN"
-                            maximumLength: 6
+                            placeholderText: "4-digit PIN"
+                            maximumLength: 4
                             inputMethodHints: Qt.ImhDigitsOnly
                         }
                         Button {
@@ -818,23 +925,45 @@ ApplicationWindow {
                 }
 
                 Frame {
+                    id: remoteEditorFrame
                     Layout.fillWidth: true
                     visible: true
                     background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                     ColumnLayout {
                         anchors.fill: parent
-                        Label { text: "Send a new script"; font.bold: true }
+                        Label { text: "Edit or send a script"; font.bold: true }
                         TextArea {
                             id: remoteScriptEditor
+                            property bool syncingDraft: false
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 170
-                            Binding { target: remoteScriptEditor; property: "text"; value: session.draftScript; when: !remoteScriptEditor.activeFocus }
+                            Layout.preferredHeight: 190
+                            text: session.draftScript
                             wrapMode: TextEdit.Wrap
                             placeholderText: "Paste Markdown here…"
-                            onTextChanged: session.setDraftScript(text)
+                            onTextChanged: {
+                                if (!syncingDraft)
+                                    session.setDraftScript(text)
+                            }
+                            Connections {
+                                target: session
+                                function onDraftScriptChanged() {
+                                    if (!remoteScriptEditor.activeFocus && remoteScriptEditor.text !== session.draftScript) {
+                                        remoteScriptEditor.syncingDraft = true
+                                        remoteScriptEditor.text = session.draftScript
+                                        remoteScriptEditor.syncingDraft = false
+                                    }
+                                }
+                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
+                            Button {
+                                text: "Clear"
+                                onClicked: {
+                                    remoteScriptEditor.text = ""
+                                    remoteScriptEditor.forceActiveFocus()
+                                }
+                            }
                             Item { Layout.fillWidth: true }
                             Button {
                                 text: "Send script to display"

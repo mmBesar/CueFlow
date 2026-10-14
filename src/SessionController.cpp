@@ -156,7 +156,12 @@ void SessionController::startHosting() {
     if (server_.isListening())
         return;
 
-    pin_ = QString::number(QRandomGenerator::global()->bounded(100000, 1000000));
+    // Generate one short LAN pairing PIN for this hosting session. It stays
+    // stable across reconnects and failed attempts, and rotates only when the
+    // user stops and starts hosting again.
+    failedPairingAttempts_ = 0;
+    pairingLockoutClock_.invalidate();
+    pin_ = QString::number(QRandomGenerator::global()->bounded(1000, 10000));
     emit pinChanged();
     if (!server_.listen(QHostAddress::AnyIPv4, kPort)) {
         setStatus(QStringLiteral("Could not listen on port %1: %2").arg(kPort).arg(server_.errorString()));
@@ -177,6 +182,8 @@ void SessionController::stopHosting() {
         emit hostingChanged();
         setStatus(QStringLiteral("Remote session stopped"));
     }
+    failedPairingAttempts_ = 0;
+    pairingLockoutClock_.invalidate();
     if (!pin_.isEmpty()) {
         pin_.clear();
         emit pinChanged();
@@ -190,8 +197,8 @@ void SessionController::connectToHost(const QString &address, const QString &pin
     }
     const QString cleanAddress = address.trimmed();
     const QString cleanPin = pin.trimmed();
-    if (cleanAddress.isEmpty() || cleanPin.size() != 6) {
-        setStatus(QStringLiteral("Enter a host address and the six-digit pairing PIN"));
+    if (cleanAddress.isEmpty() || cleanPin.size() != 4) {
+        setStatus(QStringLiteral("Enter a host address and the four-digit pairing PIN"));
         return;
     }
 
@@ -496,13 +503,15 @@ void SessionController::acceptConnections() {
         hostPeer_ = socket;
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() { readSocket(socket); });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+            const bool pairingRejected = socket->property("cueflowPairingRejected").toBool();
             authenticatedPeers_.remove(socket);
             readBuffers_.remove(socket);
             if (hostPeer_ == socket)
                 hostPeer_ = nullptr;
             socket->deleteLater();
             setConnected(false);
-            setStatus(QStringLiteral("Remote disconnected"));
+            if (!pairingRejected)
+                setStatus(QStringLiteral("Remote disconnected"));
         });
         connect(socket, &QTcpSocket::errorOccurred, this, [this, socket](QAbstractSocket::SocketError) {
             if (socket == hostPeer_)
@@ -546,12 +555,33 @@ void SessionController::handleMessage(QTcpSocket *socket, const QJsonObject &obj
     const QString type = object.value(QStringLiteral("type")).toString();
     if (!remoteMode_ && socket == hostPeer_) {
         if (type == QStringLiteral("hello")) {
+            // A four-digit PIN is convenient on a phone keyboard, so make
+            // repeated LAN guesses expensive without rotating the PIN on each
+            // failed attempt. Five failures trigger a 30-second cooldown.
+            if (pairingLockoutClock_.isValid()) {
+                if (pairingLockoutClock_.elapsed() < 30'000) {
+                    socket->setProperty("cueflowPairingRejected", true);
+                    setStatus(QStringLiteral("Pairing temporarily locked after failed PIN attempts; try again shortly"));
+                    closeSocket(socket);
+                    return;
+                }
+                pairingLockoutClock_.invalidate();
+                failedPairingAttempts_ = 0;
+            }
+
             const QString suppliedPin = object.value(QStringLiteral("pin")).toString();
-            if (!server_.isListening() || suppliedPin.size() != 6 || suppliedPin != pin_) {
-                setStatus(QStringLiteral("Rejected a remote with an invalid pairing PIN"));
+            if (!server_.isListening() || suppliedPin.size() != 4 || suppliedPin != pin_) {
+                const bool lockoutStarted = server_.isListening() && ++failedPairingAttempts_ >= 5;
+                if (lockoutStarted)
+                    pairingLockoutClock_.start();
+                socket->setProperty("cueflowPairingRejected", true);
+                setStatus(lockoutStarted
+                    ? QStringLiteral("Too many incorrect PIN attempts; pairing locked for 30 seconds")
+                    : QStringLiteral("Rejected a remote with an invalid pairing PIN"));
                 closeSocket(socket);
                 return;
             }
+            failedPairingAttempts_ = 0;
             authenticatedPeers_.insert(socket);
             setConnected(true);
             setStatus(QStringLiteral("Remote connected"));

@@ -39,3 +39,18 @@ This pass targets the first device tests and deliberately skips the app icon as 
 - Test fullscreen overlay reveal using single taps, slow/fast swipes, and mouse clicks; normal mode must never auto-hide controls.
 - Confirm speed, font-size, width, and position change by one intuitive step per wheel notch on Linux, including when the display is paired to an Android remote.
 - Confirm Linux/Android builds with GitHub Actions. Source-level tests do not replace real-device performance checks.
+
+
+# Interaction and pairing audit — 2026-10-14
+
+- Floating controls are now vertically stacked and contain only fullscreen and fullscreen control-panel toggle actions. The Appearance button remains in the header; the Edit action is in the header beside it. Fullscreen and control-panel symbols are drawn from shapes rather than font glyphs, avoiding tofu/missing-glyph boxes on Android.
+- In windowed mode the dock and control panel stay fully visible. In fullscreen, the main playback/tuning panel can be hidden independently and restored from the dock; the dock fades to 16% opacity instead of becoming unclickable/invisible. A tap on the reading surface also reveals it.
+- Removed focus-conditional `Binding` objects from both script TextAreas. Draft synchronization is explicit and refuses to replace text while the editor has focus, preventing the editor from blanking/resetting during virtual-keyboard focus changes. Added Clear actions for display and remote drafts. Exiting the editor keeps an unsaved draft; Apply commits it to the display.
+- Pairing PIN is four digits, stable during a host session and unchanged by failed attempts. Five consecutive failures trigger a 30-second cooldown. Starting/stopping hosting resets the cooldown state. The transport remains unauthenticated until PIN verification and unencrypted after pairing, so it must remain on a trusted LAN.
+
+## Verification still required
+
+- Run the full Qt/Android CI build after these changes.
+- On Android, test editing before and after opening the soft keyboard, clear/paste, text retention after leaving/re-entering the editor, and sending drafts to a Linux display.
+- Verify fullscreen dock fade/tap recovery and the controls-panel toggle with both touch and mouse.
+- Test four-digit pairing, reconnects without PIN rotation, and the failed-PIN cooldown across at least five attempts.
