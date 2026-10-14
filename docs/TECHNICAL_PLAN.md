@@ -11,7 +11,7 @@ Build a clean native-first application using Qt 6 / Qt Quick (QML) with a small 
 - Markdown editor with a one-tap return to playback.
 - Continuous scroll with speed expressed in px/s.
 - Direct progress scrub, small pixel nudges, play/pause, reset, adjustable font and line width.
-- Fullscreen with compact controls that auto-hide after inactivity and return on touch/click.
+- Fullscreen with compact floating controls that auto-hide after inactivity and return on touch/click; windowed controls remain visible.
 - Script and preferences saved locally.
 - Start/stop a temporary LAN control session only when requested.
 

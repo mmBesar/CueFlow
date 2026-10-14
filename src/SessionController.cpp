@@ -69,7 +69,8 @@ SessionController::SessionController(QObject *parent)
     connect(&settingsSaveTimer_, &QTimer::timeout, this, &SessionController::saveSettings);
     frameClock_.start();
     broadcastClock_.start();
-    frameTimer_.start();
+    // The frame timer is demand-driven: it runs during display playback or
+    // briefly to flush dirty state, rather than waking idle phones/desktops 60x/s.
 }
 
 SessionController::~SessionController() {
@@ -139,6 +140,9 @@ void SessionController::setMode(const QString &mode) {
         emit playingChanged();
     }
     remoteMode_ = useRemote;
+    frameTimer_.stop();
+    dirty_ = false;
+    dirtyScript_ = false;
     emit remoteModeChanged();
     setStatus(useRemote ? QStringLiteral("Enter the display device's LAN address and pairing PIN")
                         : QStringLiteral("Display mode — start a remote session when needed"));
@@ -461,12 +465,8 @@ void SessionController::onFrame() {
         dirty_ = true;
     }
 
-    // Tick locally at up to 125 Hz during playback for smoother fractional-pixel
-    // movement, but keep idle/remote sessions at 16 ms to avoid needless wakeups.
-    const int desiredInterval = (!remoteMode_ && model_.playing()) ? 8 : 16;
-    if (frameTimer_.interval() != desiredInterval)
-        frameTimer_.setInterval(desiredInterval);
-
+    // Match the common 60 Hz presentation cadence. Faster timers only woke the
+    // UI more often than it could present frames and amplified QML work on mobile.
     if (dirty_ && broadcastClock_.elapsed() >= 16) {
         if (!remoteMode_ && hostPeer_ && authenticatedPeers_.contains(hostPeer_))
             sendSnapshot(hostPeer_, dirtyScript_);
@@ -474,6 +474,13 @@ void SessionController::onFrame() {
         dirtyScript_ = false;
         broadcastClock_.restart();
     }
+
+    // Idle sessions have no reason to poll. A paused, zero-speed, or zero-range
+    // session also needs no animation frames; changing speed/range marks it dirty
+    // and restarts the timer. This avoids a needless 60 Hz wakeup at speed 0.
+    const bool canAdvance = model_.playing() && model_.speed() > 0.0 && scrollRange_ > 0.0;
+    if (remoteMode_ || (!canAdvance && !dirty_))
+        frameTimer_.stop();
 }
 
 void SessionController::acceptConnections() {
@@ -800,6 +807,11 @@ void SessionController::setRangeLocal(double pixels) {
 void SessionController::markDirty(bool includeScript) {
     dirty_ = true;
     dirtyScript_ = dirtyScript_ || includeScript;
+    if (!remoteMode_ && !frameTimer_.isActive()) {
+        frameClock_.restart();
+        broadcastClock_.restart();
+        frameTimer_.start();
+    }
 }
 
 void SessionController::scheduleSaveSettings() {

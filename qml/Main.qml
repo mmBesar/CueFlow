@@ -15,7 +15,8 @@ ApplicationWindow {
     color: palette.window
 
     property bool editingScript: false
-    property bool controlsVisible: true
+    // Only the small floating buttons auto-hide; the main controls stay visible.
+    property bool overlayControlsVisible: true
     property var flavorNames: ["Latte", "Frappé", "Macchiato", "Mocha"]
     property var accentNames: [
         "Rosewater", "Flamingo", "Pink", "Mauve", "Red", "Maroon",
@@ -100,8 +101,27 @@ ApplicationWindow {
     }
 
     function revealControls() {
-        controlsVisible = true
-        controlsHideTimer.restart()
+        overlayControlsVisible = true
+        if (visibility === Window.FullScreen && !editingScript)
+            controlsHideTimer.restart()
+        else
+            controlsHideTimer.stop()
+    }
+
+    function wheelDirection(event) {
+        var delta = event.angleDelta.y
+        if (delta === 0)
+            delta = event.pixelDelta.y
+        return delta > 0 ? 1 : delta < 0 ? -1 : 0
+    }
+
+    onVisibilityChanged: {
+        if (visibility === Window.FullScreen) {
+            revealControls()
+        } else {
+            controlsHideTimer.stop()
+            overlayControlsVisible = true
+        }
     }
 
     Timer {
@@ -109,10 +129,14 @@ ApplicationWindow {
         interval: 3500
         repeat: false
         onTriggered: {
-            if (!window.editingScript && !displaySeek.pressed && !displaySpeed.pressed
+            if (window.visibility !== Window.FullScreen || window.editingScript) {
+                window.overlayControlsVisible = true
+                return
+            }
+            if (!displaySeek.pressed && !displaySpeed.pressed
                     && !displayFontSize.pressed && !displayWidth.pressed
                     && !prompterFlick.moving)
-                window.controlsVisible = false
+                window.overlayControlsVisible = false
             else
                 restart()
         }
@@ -230,7 +254,11 @@ ApplicationWindow {
                             contentWidth: width
                             contentHeight: scriptFlow.height
                             boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.VerticalFlick
+                            // Preserve subpixel positions for smooth text animation, while
+                            // allowing a deliberate touch flick to cover long scripts.
                             pixelAligned: false
+                            maximumFlickVelocity: 8000
                             property bool syncingFromModel: false
                             property bool localSeekGestureActive: false
                             property bool geometryChangedDuringGesture: false
@@ -245,28 +273,20 @@ ApplicationWindow {
                                 }
                             }
 
-                            onContentYChanged: {
-                                // Only movement that began as a real pointer drag is user intent.
-                                // `moving` alone also covers animation/reflow clamping, which can
-                                // turn a stale offset into progress=1 and echo a jump to a remote.
-                                if (!syncingFromModel && localSeekGestureActive
-                                        && !geometryChangedDuringGesture && session.scrollRange > 0) {
-                                    const liveRange = Math.max(0, contentHeight - height)
-                                    if (liveRange > 0)
-                                        session.seekTo(contentY / liveRange)
-                                }
-                            }
-
+                            // Commit position once when a native touch drag/flick ends. Calling
+                            // into C++ and echoing progressChanged back into contentY on every
+                            // motion frame made gestures crawl, especially on Android.
                             onMovementEnded: {
                                 if (!localSeekGestureActive)
                                     return
 
                                 const liveRange = Math.max(0, contentHeight - height)
-                                if (!geometryChangedDuringGesture && liveRange > 0) {
+                                const didGeometryChange = geometryChangedDuringGesture
+                                if (!didGeometryChange && liveRange > 0) {
                                     session.seekTo(contentY / liveRange)
                                 } else {
-                                    // The range changed mid-gesture (for example, a resize or
-                                    // reflow); preserve the last authoritative progress fraction.
+                                    // The range changed mid-gesture; preserve the last
+                                    // authoritative progress fraction after the gesture ends.
                                     syncingFromModel = true
                                     contentY = session.progress * liveRange
                                     syncingFromModel = false
@@ -274,6 +294,8 @@ ApplicationWindow {
                                 localSeekGestureActive = false
                                 geometryChangedDuringGesture = false
                                 session.endSeek()
+                                if (didGeometryChange)
+                                    Qt.callLater(syncScrollMetrics)
                             }
 
                             Column {
@@ -291,6 +313,8 @@ ApplicationWindow {
                                     text: session.safeMarkdown
                                     textFormat: TextEdit.MarkdownText
                                     readOnly: true
+                                    activeFocusOnPress: false
+                                    cursorVisible: false
                                     selectByMouse: false
                                     wrapMode: TextEdit.Wrap
                                     color: window.activePalette.text
@@ -318,11 +342,15 @@ ApplicationWindow {
                             Connections {
                                 target: session
                                 function onProgressChanged() {
+                                    if (prompterFlick.localSeekGestureActive)
+                                        return
                                     prompterFlick.syncingFromModel = true
                                     prompterFlick.contentY = session.progress * Math.max(0, prompterFlick.contentHeight - prompterFlick.height)
                                     prompterFlick.syncingFromModel = false
                                 }
                                 function onScrollRangeChanged() {
+                                    if (prompterFlick.localSeekGestureActive)
+                                        return
                                     prompterFlick.syncingFromModel = true
                                     prompterFlick.contentY = session.progress * Math.max(0, prompterFlick.contentHeight - prompterFlick.height)
                                     prompterFlick.syncingFromModel = false
@@ -330,6 +358,12 @@ ApplicationWindow {
                             }
 
                             function syncScrollMetrics() {
+                                // Defer reflow/range writes until a user's drag has completed,
+                                // otherwise a font/viewport change can jump under their finger.
+                                if (localSeekGestureActive) {
+                                    geometryChangedDuringGesture = true
+                                    return
+                                }
                                 // A remote never measures/overwrites the host's authoritative range.
                                 if (session.remoteMode)
                                     return
@@ -351,6 +385,15 @@ ApplicationWindow {
                                 Qt.callLater(syncScrollMetrics)
                             }
                             Component.onCompleted: Qt.callLater(syncScrollMetrics)
+
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                gesturePolicy: TapHandler.DragThreshold
+                                onTapped: {
+                                    if (window.visibility === Window.FullScreen && !window.editingScript)
+                                        window.revealControls()
+                                }
+                            }
 
                             // Low-contrast edge fades keep attention on the reading line.
                             Rectangle {
@@ -390,7 +433,7 @@ ApplicationWindow {
                             anchors.margins: 8
                             spacing: 6
                             z: 5
-                            visible: window.controlsVisible
+                            visible: window.overlayControlsVisible
 
                             Button {
                                 implicitWidth: 34; implicitHeight: 34; padding: 0
@@ -467,15 +510,15 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle { Layout.fillWidth: true; height: 1; color: window.activePalette.surface1; visible: window.controlsVisible && !window.editingScript }
+                Rectangle { Layout.fillWidth: true; height: 1; color: window.activePalette.surface1; visible: !window.editingScript }
                 ColumnLayout {
-                    visible: window.controlsVisible && !window.editingScript
+                    visible: !window.editingScript
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 7
-                    Layout.bottomMargin: 8
-                    spacing: 6
+                    Layout.leftMargin: 10
+                    Layout.rightMargin: 10
+                    Layout.topMargin: 5
+                    Layout.bottomMargin: 5
+                    spacing: 4
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -503,36 +546,92 @@ ApplicationWindow {
                             Binding { target: displaySeek; property: "value"; value: session.progress; when: !displaySeek.pressed }
                             onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
                             onMoved: session.seekTo(value)
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    const direction = window.wheelDirection(event)
+                                    if (direction !== 0) {
+                                        session.beginSeek()
+                                        session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)))
+                                        session.endSeek()
+                                        event.accepted = true
+                                    }
+                                }
+                            }
                         }
                     }
                     GridLayout {
+                        id: displayTuningControls
                         Layout.fillWidth: true
-                        columns: 2
-                        columnSpacing: 18
-                        rowSpacing: 7
-                        Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displaySpeed
+                        columns: window.width >= 760 ? 3 : 1
+                        columnSpacing: 14
+                        rowSpacing: 4
+
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            from: 0; to: 600; stepSize: 1
-                            Binding { target: displaySpeed; property: "value"; value: session.speed; when: !displaySpeed.pressed }
-                            onMoved: session.setSpeed(value)
+                            spacing: 0
+                            Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: 12 }
+                            Slider {
+                                id: displaySpeed
+                                Layout.fillWidth: true
+                                from: 0; to: 600; stepSize: 1
+                                Binding { target: displaySpeed; property: "value"; value: session.speed; when: !displaySpeed.pressed }
+                                onMoved: session.setSpeed(value)
+                                WheelHandler {
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: function(event) {
+                                        const direction = window.wheelDirection(event)
+                                        if (direction !== 0) {
+                                            session.setSpeed(Math.max(0, Math.min(600, session.speed + direction * 10)))
+                                            event.accepted = true
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displayFontSize
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            from: 12; to: 100; stepSize: 1
-                            Binding { target: displayFontSize; property: "value"; value: session.fontSize; when: !displayFontSize.pressed }
-                            onMoved: session.setFontSize(value)
+                            spacing: 0
+                            Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: 12 }
+                            Slider {
+                                id: displayFontSize
+                                Layout.fillWidth: true
+                                from: 12; to: 100; stepSize: 1
+                                Binding { target: displayFontSize; property: "value"; value: session.fontSize; when: !displayFontSize.pressed }
+                                onMoved: session.setFontSize(value)
+                                WheelHandler {
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: function(event) {
+                                        const direction = window.wheelDirection(event)
+                                        if (direction !== 0) {
+                                            session.setFontSize(Math.max(12, Math.min(100, session.fontSize + direction)))
+                                            event.accepted = true
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displayWidth
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            from: 35; to: 100; stepSize: 1
-                            Binding { target: displayWidth; property: "value"; value: session.textWidth; when: !displayWidth.pressed }
-                            onMoved: session.setTextWidth(value)
+                            spacing: 0
+                            Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: 12 }
+                            Slider {
+                                id: displayWidth
+                                Layout.fillWidth: true
+                                from: 35; to: 100; stepSize: 1
+                                Binding { target: displayWidth; property: "value"; value: session.textWidth; when: !displayWidth.pressed }
+                                onMoved: session.setTextWidth(value)
+                                WheelHandler {
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: function(event) {
+                                        const direction = window.wheelDirection(event)
+                                        if (direction !== 0) {
+                                            session.setTextWidth(Math.max(35, Math.min(100, session.textWidth + direction)))
+                                            event.accepted = true
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -621,12 +720,12 @@ ApplicationWindow {
                     color: window.activePalette.mantle
                     border.color: window.activePalette.surface1
                     visible: session.connected
-                    implicitHeight: remoteControls.implicitHeight + 36
+                    implicitHeight: remoteControls.implicitHeight + 20
                     ColumnLayout {
                         id: remoteControls
                         anchors.fill: parent
-                        anchors.margins: 18
-                        spacing: 16
+                        anchors.margins: 10
+                        spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
                             Button { text: "− 20 px"; onClicked: session.nudgePixels(-20); onPressAndHold: session.nudgePixels(-60) }
@@ -647,6 +746,18 @@ ApplicationWindow {
                             Binding { target: remoteSeek; property: "value"; value: session.progress; when: !remoteSeek.pressed }
                             onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
                             onMoved: session.seekTo(value)
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    const direction = window.wheelDirection(event)
+                                    if (direction !== 0) {
+                                        session.beginSeek()
+                                        session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)))
+                                        session.endSeek()
+                                        event.accepted = true
+                                    }
+                                }
+                            }
                         }
                         Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1 }
                         Slider {
@@ -655,6 +766,16 @@ ApplicationWindow {
                             from: 0; to: 600; stepSize: 1
                             Binding { target: remoteSpeed; property: "value"; value: session.speed; when: !remoteSpeed.pressed }
                             onMoved: session.setSpeed(value)
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    const direction = window.wheelDirection(event)
+                                    if (direction !== 0) {
+                                        session.setSpeed(Math.max(0, Math.min(600, session.speed + direction * 10)))
+                                        event.accepted = true
+                                    }
+                                }
+                            }
                         }
                         Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1 }
                         Slider {
@@ -663,6 +784,16 @@ ApplicationWindow {
                             from: 12; to: 100; stepSize: 1
                             Binding { target: remoteFontSize; property: "value"; value: session.fontSize; when: !remoteFontSize.pressed }
                             onMoved: session.setFontSize(value)
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    const direction = window.wheelDirection(event)
+                                    if (direction !== 0) {
+                                        session.setFontSize(Math.max(12, Math.min(100, session.fontSize + direction)))
+                                        event.accepted = true
+                                    }
+                                }
+                            }
                         }
                         Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1 }
                         Slider {
@@ -671,6 +802,16 @@ ApplicationWindow {
                             from: 35; to: 100; stepSize: 1
                             Binding { target: remoteWidth; property: "value"; value: session.textWidth; when: !remoteWidth.pressed }
                             onMoved: session.setTextWidth(value)
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    const direction = window.wheelDirection(event)
+                                    if (direction !== 0) {
+                                        session.setTextWidth(Math.max(35, Math.min(100, session.textWidth + direction)))
+                                        event.accepted = true
+                                    }
+                                }
+                            }
                         }
                         Button { text: "Reset to beginning"; onClicked: session.resetPlayback() }
                     }
@@ -714,12 +855,6 @@ ApplicationWindow {
             }
             }
         }
-    }
-
-    TapHandler {
-        acceptedButtons: Qt.AllButtons
-        onPressedChanged: if (pressed && !window.editingScript) window.revealControls()
-        onTapped: if (!window.editingScript) window.revealControls()
     }
 
     Dialog {
