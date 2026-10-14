@@ -75,5 +75,5 @@ This pass targets the first device tests and deliberately skips the app icon as 
 
 # Legacy Android APK staging fix — 2026-10-14
 
-- Corrected the Qt 5.15.2 Android 6 CI job to run the generated `make apk` target. A plain `make` compiles the native application library but does not guarantee staging it under `android-build/libs/<abi>/`, which is where `androiddeployqt` looks for it. Qt 5.15's `apk` target stages application binaries/resources and invokes the packaging flow.
+- Corrected the Qt 5.15.2 Android 6 CI job to run `make apk_install_target` after compiling. A plain `make` compiles the native application library but does not stage it under `android-build/libs/<abi>/`, where `androiddeployqt` expects it. The Qt 5.15 `apk_install_target` is used explicitly before the packaging command.
 - Kept the explicit `androiddeployqt` invocation after the staging target so the CI job can pin the Android SDK platform (`android-31`) and JDK path. The modern Qt 6 Android job and desktop/NixOS workflows are unchanged.

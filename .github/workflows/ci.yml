@@ -636,6 +636,17 @@ jobs:
           grep -n 'package=' "$template_dest/AndroidManifest.xml"
           grep -n 'applicationId' "$template_dest/build.gradle"
 
+      - name: Prepare Qt 5.15-compatible QML imports
+        run: |
+          set -euxo pipefail
+          python3 scripts/prepare-qt5-legacy-qml.py | tee diagnostics/qt5-qml-compatibility.log
+          test -s android-legacy/generated/Main.qml
+          grep -Fx 'import QtQuick 2.15' android-legacy/generated/Main.qml
+          grep -Fx 'import QtQuick.Controls 2.15' android-legacy/generated/Main.qml
+          grep -Fx 'import QtQuick.Controls.Material 2.15' android-legacy/generated/Main.qml
+          grep -Fx 'import QtQuick.Layouts 1.15' android-legacy/generated/Main.qml
+          grep -Fx 'import QtQuick.Window 2.15' android-legacy/generated/Main.qml
+
       - name: Configure legacy Android build
         run: |
           set -euxo pipefail

@@ -13,3 +13,6 @@ CMakeCache.txt
 scroll_model_test-riscv64
 /build-android/
 /artifacts/
+
+# Generated Qt 5.15-compatible QML for the legacy Android build.
+/android-legacy/generated/

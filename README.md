@@ -36,7 +36,7 @@ The display device is authoritative for playback. The remote sends intent (toggl
 - **Modern APK:** Qt 6.12, `arm64-v8a`, minimum Android 9 (API 28), target Android 16 (API 36). This is the recommended build for current phones.
 - **Legacy APK:** Qt 5.15.2, 32-bit `armeabi-v7a`, minimum Android 5/API 21 (so Android 6/API 23 is within the stated Qt 5.15 support range), target API 28. Its separate package ID lets it coexist with the modern app. It is intended for old phones and does not replace the modern build. The Qt 5.15 line is older and should not be the default for new installations.
 
-The legacy APK is only validated if the dedicated GitHub Actions job succeeds and it is then tested on the actual Android 6 device. Android 6 phones that lack support for 32-bit ARM apps cannot use this `armeabi-v7a` package. The legacy job copies Qt 5.15's own Android package template, explicitly sets both the manifest package and Gradle `applicationId` to `org.mmbesar.cueflow.legacy`, then uses Qt 5.15's `make apk` target to stage the native binary and resources before Android packaging.
+The legacy APK is only validated if the dedicated GitHub Actions job succeeds and it is then tested on the actual Android 6 device. Android 6 phones that lack support for 32-bit ARM apps cannot use this `armeabi-v7a` package. The legacy job copies Qt 5.15's own Android package template, explicitly sets both the manifest package and Gradle `applicationId` to `org.mmbesar.cueflow.legacy`, then runs `make apk_install_target` to stage the native binary and resources before invoking `androiddeployqt`. Before qmake, CI generates a Qt 5.15-compatible `android-legacy/generated/Main.qml` with explicit QML import versions, because the shared source uses Qt 6's versionless import syntax.
 
 ## Requirements
 
@@ -87,3 +87,11 @@ MIT — see `LICENSE`.
 
 
 **CI note:** Qt builds install the Qt Declarative (`Qml`, `Quick`, `QuickControls2`) and Shader Tools modules. Linux Qt roots are discovered from `Qt6Config.cmake` rather than hard-coded from an architecture alias. Android uses a matching Linux host Qt install via `QT_HOST_PATH`. RISC-V CI is currently disabled.
+
+## Android 6 legacy build
+
+The Qt 5.15.2 legacy target uses versioned QML imports. Run `python3 scripts/prepare-qt5-legacy-qml.py` before qmake; it generates an ignored compatibility copy from `qml/Main.qml`.
+
+### Diagnosing Android 6 startup
+
+The legacy build logs QML load/creation errors with the `CueFlow QML:` prefix. If startup still fails on the old phone, connect it with ADB and capture `adb logcat` immediately after launching CueFlow. The application now exits if its QML root object cannot be created instead of showing a misleading blank window.

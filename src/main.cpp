@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlError>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
@@ -85,6 +86,14 @@ int main(int argc, char *argv[]) {
 
     SessionController session;
     QQmlApplicationEngine engine;
+    // Always print QML errors clearly. This is especially important for the
+    // Qt 5.15 Android 6 build, where a failed root component previously left
+    // an apparently blank white Activity running.
+    QObject::connect(&engine, &QQmlEngine::warnings, &app,
+                     [](const QList<QQmlError> &warnings) {
+                         for (const QQmlError &warning : warnings)
+                             qWarning().noquote() << "CueFlow QML:" << warning.toString();
+                     });
     engine.rootContext()->setContextProperty(QStringLiteral("session"), &session);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
@@ -92,6 +101,10 @@ int main(int argc, char *argv[]) {
     engine.loadFromModule(QStringLiteral("CueFlow"), QStringLiteral("Main"));
 #else
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        qCritical().noquote() << "CueFlow: failed to create the QML root object; see the QML diagnostics above.";
+        return EXIT_FAILURE;
+    }
 #endif
     // The Activity is available by the time the QML engine is loaded.
     setKeepScreenOn(true);
