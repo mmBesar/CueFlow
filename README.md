@@ -9,16 +9,16 @@ For local development, a Nix flake provides the Qt build environment (`nix devel
 ## Goals
 
 - One application that can be either **Display** or **Remote**.
-- Native Linux desktop builds for `amd64` and `arm64`; Android `arm64-v8a` is the first mobile target. RISC-V is temporarily out of CI while the core builds are stabilized.
+- Native Linux desktop builds for `amd64` and `arm64`; a modern Android `arm64-v8a` APK plus a separate Qt 5.15.2 `armeabi-v7a` legacy APK for Android 6-era devices. RISC-V is temporarily out of CI while the core builds are stabilized.
 - Markdown scripts and per-block automatic paragraph direction for Arabic/English BiDi text.
-- Time-based scrolling in rendered pixels per second, not one-pixel timer increments; playback uses a 16 ms cadence and the frame timer sleeps while idle.
+- Time-based scrolling in rendered pixels per second, not one-pixel timer increments; playback uses a 16 ms cadence and the frame timer sleeps while idle. Markdown BiDi updates only touch blocks when a direction format actually changes, avoiding repeated format-notification work.
 - A live position slider, small pixel nudges, pause/resume while seeking, speed/font/text-width controls, reset, and fullscreen.
 - Direct LAN connection: the display app temporarily hosts a local TCP session. No Docker, persistent server, cloud service, browser, or separate server process is required.
 - Local settings and scripts persisted with `QSettings`.
 
 ## Current status
 
-This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64 and arm64, and builds/tests the Qt application on amd64 and arm64 plus an Android arm64-v8a APK. The workflow uses individually named jobs, with Qt installation commands split into normal workflow steps to make installer logs easier to inspect. RISC-V is temporarily disabled. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, editor behavior, and screen-on lifecycle behavior. Android keeps the screen awake while CueFlow is foregrounded. The four Catppuccin flavors and all 26 named palette colors are available in Appearance settings. The floating controls are stacked vertically: fullscreen is always available, and a second button toggles the main playback/tuning panel in fullscreen. In fullscreen the dock fades to a low-opacity state after inactivity but remains hit-testable; normal mode keeps controls visible. The script editor keeps its draft while focus changes and has a Clear action on both display and remote devices. Pairing uses a four-digit LAN PIN that remains stable for a hosting session; five failed attempts trigger a 30-second cooldown. Touch scrolling commits progress after the native flick ends instead of round-tripping every movement frame through the controller; mouse-wheel/touchpad-wheel input adjusts each slider. The display remains the sole playback clock so remote clients do not drift against a different viewport range. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
+This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64 and arm64, builds/tests the Qt application on amd64 and arm64, builds a modern Qt 6.12 Android arm64-v8a APK, and attempts a separate Qt 5.15.2 legacy APK for 32-bit ARM devices running Android 6 or newer. The workflow uses individually named jobs, with Qt installation commands split into normal workflow steps to make installer logs easier to inspect. RISC-V is temporarily disabled. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, editor behavior, and screen-on lifecycle behavior. Android keeps the screen awake while CueFlow is foregrounded. The four Catppuccin flavors and all 26 named palette colors are available in Appearance settings. The floating controls are stacked vertically: fullscreen is always available, and a second button toggles the main playback/tuning panel in fullscreen. In fullscreen the dock fades to a low-opacity state after inactivity but remains hit-testable; normal mode keeps controls visible. The script editor keeps its draft while focus changes and has a Clear action on both display and remote devices. Pairing uses a four-digit LAN PIN that remains stable for a hosting session; five failed attempts trigger a 30-second cooldown. Touch scrolling commits progress after the native flick ends instead of round-tripping every movement frame through the controller; mouse-wheel/touchpad-wheel input adjusts each slider. The display remains the sole playback clock so remote clients do not drift against a different viewport range. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
 
 The first pairing flow is deliberately manual: start a session on the display, then enter one of the displayed LAN addresses, port `47773`, and the four-digit PIN on the remote. The PIN remains stable until hosting is stopped; five failed pairing attempts trigger a 30-second cooldown. QR pairing, service discovery, and TLS remain planned follow-up work. On Android, CueFlow requests that the screen stay awake while the app is foregrounded. Keep the prototype on a trusted LAN; the initial TCP transport is not encrypted and must not be exposed to the public Internet.
 
@@ -31,9 +31,16 @@ The first pairing flow is deliberately manual: start a session on the display, t
 
 The display device is authoritative for playback. The remote sends intent (toggle, seek, nudge, speed, font size, width, replace script); the display broadcasts current state. Position is synchronized as a normalized fraction of the current scrollable range, while speed is physically meaningful in pixels/second. During a position drag, playback pauses and resumes afterward only if it had been playing before the drag.
 
+## Android version support
+
+- **Modern APK:** Qt 6.12, `arm64-v8a`, minimum Android 9 (API 28), target Android 16 (API 36). This is the recommended build for current phones.
+- **Legacy APK:** Qt 5.15.2, 32-bit `armeabi-v7a`, minimum Android 5/API 21 (so Android 6/API 23 is within the stated Qt 5.15 support range), target API 28. Its separate package ID lets it coexist with the modern app. It is intended for old phones and does not replace the modern build. The Qt 5.15 line is older and should not be the default for new installations.
+
+The legacy APK is only validated if the dedicated GitHub Actions job succeeds and it is then tested on the actual Android 6 device. Android 6 phones that lack support for 32-bit ARM apps cannot use this `armeabi-v7a` package.
+
 ## Requirements
 
-- Qt 6.5 or newer with `Core`, `Gui`, `Network`, `Qml`, `Quick`, `QuickControls2`, and Qt Quick Controls' Material style.
+- Qt 6.5 or newer with `Core`, `Gui`, `Network`, `Qml`, `Quick`, `QuickControls2`, and Qt Quick Controls' Material style for the main app.
 - CMake 3.21+, a C++20 compiler, and Ninja or Make.
 - For Android packaging: Qt for Android plus the Android SDK/NDK and a compatible JDK/Gradle toolchain for the chosen Qt release.
 

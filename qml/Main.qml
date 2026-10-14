@@ -117,6 +117,7 @@ ApplicationWindow {
     }
 
     onVisibilityChanged: {
+        session.setViewerFullscreenState(visibility === Window.FullScreen)
         if (visibility === Window.FullScreen) {
             displayControlsVisible = true
             revealControls()
@@ -126,6 +127,7 @@ ApplicationWindow {
             displayControlsVisible = true
         }
     }
+    onDisplayControlsVisibleChanged: session.setViewerControlsVisibleState(displayControlsVisible)
 
     Timer {
         id: controlsHideTimer
@@ -387,7 +389,17 @@ ApplicationWindow {
                                     textMargin: 0
                                     padding: 0
                                     height: Math.max(contentHeight, 1)
-                                    onTextChanged: Qt.callLater(function() { session.applyAutoBidi(textDocument) })
+                                    property string lastBidiText: ""
+                                    function applyBidiForChangedText() {
+                                        // Formatting a QTextDocument block can trigger textChanged
+                                        // even when the text itself is unchanged. Keep the bidi
+                                        // pass tied to actual content changes, not formatting events.
+                                        if (lastBidiText === text)
+                                            return
+                                        lastBidiText = text
+                                        session.applyAutoBidi(textDocument)
+                                    }
+                                    onTextChanged: Qt.callLater(applyBidiForChangedText)
                                     onContentHeightChanged: Qt.callLater(function() {
                                         if (!session.remoteMode)
                                             session.setScrollRange(Math.max(0, prompterFlick.contentHeight - prompterFlick.height))
@@ -504,32 +516,34 @@ ApplicationWindow {
                             // controls button itself remains available, so users never
                             // need a special gesture to recover hidden controls.
                             Button {
-                                implicitWidth: 36; implicitHeight: 36; padding: 0
+                                implicitWidth: 40; implicitHeight: 40; padding: 0
                                 ToolTip.visible: hovered
                                 ToolTip.text: window.visibility === Window.FullScreen ? "Exit fullscreen" : "Enter fullscreen"
                                 onPressed: window.revealControls()
                                 onClicked: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
-                                background: Rectangle { radius: 11; color: window.activePalette.mantle; opacity: 0.92; border.color: window.activePalette.surface1 }
+                                background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.96; border.color: window.activePalette.surface1 }
                                 contentItem: Item {
-                                    // Draw both states with shapes instead of font glyphs,
-                                    // which were showing as missing-character boxes.
-                                    readonly property color iconColor: window.activePalette.text
-                                    readonly property bool isFullscreen: window.visibility === Window.FullScreen
-                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 9; width: 8; height: 2; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 9; width: 2; height: 8; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 19; y: 9; width: 8; height: 2; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 25; y: 9; width: 2; height: 8; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 25; width: 8; height: 2; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 9; y: 19; width: 2; height: 8; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 19; y: 25; width: 8; height: 2; color: parent.iconColor }
-                                    Rectangle { visible: !parent.isFullscreen; x: 25; y: 19; width: 2; height: 8; color: parent.iconColor }
-                                    Rectangle { visible: parent.isFullscreen; x: 8; y: 8; width: 20; height: 20; radius: 2; color: "transparent"; border.width: 2; border.color: parent.iconColor }
-                                    Rectangle { visible: parent.isFullscreen; x: 8; y: 8; width: 20; height: 3; color: parent.iconColor }
+                                    id: fullscreenGlyph
+                                    implicitWidth: 40
+                                    implicitHeight: 40
+                                    property color glyphColor: window.activePalette.text
+                                    property bool fullscreenMode: window.visibility === Window.FullScreen
+
+                                    // Draw the icon with native QML shapes, not a font glyph or
+                                    // Canvas. These remain visible with minimal fonts and on Qt 5.
+                                    Rectangle { x: 8; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: 8; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: 30; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: 8; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: 8; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    Rectangle { x: 30; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
                                 }
                             }
                             Button {
                                 visible: window.visibility === Window.FullScreen
-                                implicitWidth: 36; implicitHeight: 36; padding: 0
+                                implicitWidth: 40; implicitHeight: 40; padding: 0
                                 ToolTip.visible: hovered
                                 ToolTip.text: window.displayControlsVisible ? "Hide controls" : "Show controls"
                                 onPressed: window.revealControls()
@@ -537,15 +551,19 @@ ApplicationWindow {
                                     window.displayControlsVisible = !window.displayControlsVisible
                                     window.revealControls()
                                 }
-                                background: Rectangle { radius: 11; color: window.activePalette.mantle; opacity: 0.92; border.color: window.activePalette.surface1 }
+                                background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.96; border.color: window.activePalette.surface1 }
                                 contentItem: Item {
-                                    // Three compact, custom-drawn slider tracks.
-                                    Rectangle { x: 8; y: 10; width: 20; height: 2; radius: 1; color: window.activePalette.text }
-                                    Rectangle { x: 8; y: 17; width: 20; height: 2; radius: 1; color: window.activePalette.text }
-                                    Rectangle { x: 8; y: 24; width: 20; height: 2; radius: 1; color: window.activePalette.text }
-                                    Rectangle { x: 13; y: 7; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
-                                    Rectangle { x: 20; y: 14; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
-                                    Rectangle { x: 11; y: 21; width: 4; height: 8; radius: 2; color: window.accentColor; border.color: window.activePalette.mantle }
+                                    id: controlsGlyph
+                                    implicitWidth: 40
+                                    implicitHeight: 40
+                                    property color glyphColor: window.activePalette.text
+                                    property color glyphAccent: window.accentColor
+                                    Rectangle { x: 9; y: 11; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                    Rectangle { x: 9; y: 19; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                    Rectangle { x: 9; y: 27; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                    Rectangle { x: 15; y: 8; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                    Rectangle { x: 23; y: 16; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                    Rectangle { x: 12; y: 24; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
                                 }
                             }
                         }
@@ -559,33 +577,41 @@ ApplicationWindow {
                             spacing: 12
                             Label { text: "Script editor"; font.pixelSize: 22; font.bold: true }
                             Label { text: "Markdown • Arabic + English • stored locally"; color: window.activePalette.subtext0 }
-                            TextArea {
-                                id: scriptEditor
-                                property bool syncingDraft: false
+                            ScrollView {
+                                id: scriptEditorScroll
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                text: session.draftScript
-                                placeholderText: "Write your Markdown script here…"
-                                wrapMode: TextEdit.Wrap
-                                font.family: "monospace"
-                                font.pixelSize: 16
-                                onTextChanged: {
-                                    if (!syncingDraft)
-                                        session.setDraftScript(text)
-                                }
-                                Connections {
-                                    target: session
-                                    function onDraftScriptChanged() {
-                                        // Never replace active user input. Update only when
-                                        // a new authoritative draft arrives while unfocused.
-                                        if (!scriptEditor.activeFocus && scriptEditor.text !== session.draftScript) {
-                                            scriptEditor.syncingDraft = true
-                                            scriptEditor.text = session.draftScript
-                                            scriptEditor.syncingDraft = false
+                                clip: true
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                TextArea {
+                                    id: scriptEditor
+                                    property bool syncingDraft: false
+                                    width: scriptEditorScroll.availableWidth
+                                    text: session.draftScript
+                                    placeholderText: "Write your Markdown script here…"
+                                    wrapMode: TextEdit.Wrap
+                                    font.family: "monospace"
+                                    font.pixelSize: 16
+                                    selectByMouse: true
+                                    persistentSelection: true
+                                    onTextChanged: {
+                                        if (!syncingDraft)
+                                            session.setDraftScript(text)
+                                    }
+                                    Connections {
+                                        target: session
+                                        function onDraftScriptChanged() {
+                                            // Never replace active user input. Update only when
+                                            // a new authoritative draft arrives while unfocused.
+                                            if (!scriptEditor.activeFocus && scriptEditor.text !== session.draftScript) {
+                                                scriptEditor.syncingDraft = true
+                                                scriptEditor.text = session.draftScript
+                                                scriptEditor.syncingDraft = false
+                                            }
                                         }
                                     }
+                                    background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                                 }
-                                background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
@@ -845,6 +871,22 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
                             Button { text: "+ 20 px"; onClicked: session.nudgePixels(20); onPressAndHold: session.nudgePixels(60) }
                         }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Button {
+                                Layout.fillWidth: true
+                                text: session.viewerFullscreen ? "Exit display fullscreen" : "Fullscreen display"
+                                font.pixelSize: 12
+                                onClicked: session.requestViewerFullscreenToggle()
+                            }
+                            Button {
+                                Layout.fillWidth: true
+                                text: session.viewerControlsVisible ? "Hide display controls" : "Show display controls"
+                                font.pixelSize: 12
+                                onClicked: session.requestViewerControlsToggle()
+                            }
+                        }
                         Label { text: "Live position · " + Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1 }
                         Slider {
                             id: remoteSeek
@@ -932,25 +974,33 @@ ApplicationWindow {
                     ColumnLayout {
                         anchors.fill: parent
                         Label { text: "Edit or send a script"; font.bold: true }
-                        TextArea {
-                            id: remoteScriptEditor
-                            property bool syncingDraft: false
+                        ScrollView {
+                            id: remoteScriptEditorScroll
                             Layout.fillWidth: true
                             Layout.preferredHeight: 190
-                            text: session.draftScript
-                            wrapMode: TextEdit.Wrap
-                            placeholderText: "Paste Markdown here…"
-                            onTextChanged: {
-                                if (!syncingDraft)
-                                    session.setDraftScript(text)
-                            }
-                            Connections {
-                                target: session
-                                function onDraftScriptChanged() {
-                                    if (!remoteScriptEditor.activeFocus && remoteScriptEditor.text !== session.draftScript) {
-                                        remoteScriptEditor.syncingDraft = true
-                                        remoteScriptEditor.text = session.draftScript
-                                        remoteScriptEditor.syncingDraft = false
+                            clip: true
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            TextArea {
+                                id: remoteScriptEditor
+                                property bool syncingDraft: false
+                                width: remoteScriptEditorScroll.availableWidth
+                                text: session.draftScript
+                                wrapMode: TextEdit.Wrap
+                                placeholderText: "Paste Markdown here…"
+                                selectByMouse: true
+                                persistentSelection: true
+                                onTextChanged: {
+                                    if (!syncingDraft)
+                                        session.setDraftScript(text)
+                                }
+                                Connections {
+                                    target: session
+                                    function onDraftScriptChanged() {
+                                        if (!remoteScriptEditor.activeFocus && remoteScriptEditor.text !== session.draftScript) {
+                                            remoteScriptEditor.syncingDraft = true
+                                            remoteScriptEditor.text = session.draftScript
+                                            remoteScriptEditor.syncingDraft = false
+                                        }
                                     }
                                 }
                             }
@@ -983,6 +1033,17 @@ ApplicationWindow {
                 }
             }
             }
+        }
+    }
+
+    Connections {
+        target: session
+        function onViewerFullscreenToggleRequested() {
+            window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
+        }
+        function onViewerControlsToggleRequested() {
+            window.displayControlsVisible = !window.displayControlsVisible
+            window.revealControls()
         }
     }
 

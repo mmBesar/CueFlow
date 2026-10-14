@@ -54,3 +54,20 @@ This pass targets the first device tests and deliberately skips the app icon as 
 - On Android, test editing before and after opening the soft keyboard, clear/paste, text retention after leaving/re-entering the editor, and sending drafts to a Linux display.
 - Verify fullscreen dock fade/tap recovery and the controls-panel toggle with both touch and mouse.
 - Test four-digit pairing, reconnects without PIN rotation, and the failed-PIN cooldown across at least five attempts.
+
+# Remote controls, editor scrolling, CPU audit, and Android legacy target — 2026-10-14
+
+- Added remote commands for toggling the display window's fullscreen state and the display control panel. The display remains authoritative and publishes the two view states in its snapshots so the remote button labels track the viewer.
+- Wrapped both local and remote TextArea editors in ScrollView with a vertical scrollbar. This delegates touch dragging/flicking on Android and mouse-wheel/touchpad-wheel scrolling on desktop to Qt's scroll container while keeping each draft intact.
+- Replaced floating-button line/rectangle composition with explicitly sized native QML rectangle shapes. The icons no longer depend on font glyph coverage, Canvas rendering, or inherited Item dimensions.
+- Made the Markdown BiDi update idempotent in C++ and gated the QML trigger on actual text changes. Repeated block-format writes from `TextEdit.textChanged` can form a document-notification feedback loop; the formatter now skips blocks already using `Qt::LayoutDirectionAuto`, and the QML layer ignores text-change notifications that contain no text change.
+- Kept Qt Quick's standard rendering architecture rather than introducing unneeded worker threads. GUI input/layout/render work is not made faster by forcing the app to occupy more cores; if sustained high CPU remains after eliminating the feedback path, profile with the app paused before attempting broader threading changes.
+- Added a separate Qt 5.15.2/qmake build definition and CI job for an Android 6+ legacy APK (`armeabi-v7a`, min SDK/API 21, package ID `org.mmbesar.cueflow.legacy`). The primary Android arm64 APK remains on Qt 6.12 and Android 9+ (API 28). Qt 5.15's official Android documentation lists support from Android 5/API 21 through Android 12/API 31; the legacy target is for old devices, not the recommended modern build.
+
+## Verification still required
+
+- Run the full modern Qt 6 and Qt 5.15 legacy Android jobs in GitHub Actions. The local environment does not have Qt's Android kits, Gradle wrapper, Android SDK, or QML lint tools installed, so APK compatibility has not been proven locally.
+- Test remote fullscreen/control toggles in both directions: request them from Android remote while Linux is the display, and vice versa.
+- Test long text editing via touch fling and mouse wheel on both editor views.
+- Check idle CPU use with playback paused, then compare while playback is running. The source-level fix targets repeated block-format writes; it is not yet a measured CPU benchmark.
+- Install `CueFlow-android6-armv7-legacy-debug.apk` on the Android 6 phone and verify keyboard, screen-awake, scroll, network pairing, and script edits. It is a separate package to allow the modern version to coexist.

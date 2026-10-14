@@ -11,6 +11,7 @@ The workflow deliberately uses **separately named jobs**, not a matrix, so each 
 - `Qt desktop build — Linux amd64`
 - `Qt desktop build — Linux arm64`
 - `Android APK — arm64-v8a`
+- `Legacy Android APK — Android 6+ (32-bit ARM)`
 
 RISC-V is temporarily excluded while we get the mainstream builds stable. It can be reintroduced later as a separate native RISE job.
 
@@ -42,7 +43,8 @@ A successful workflow uploads these seven-day development artifacts:
 
 - `cueflow-linux-amd64`
 - `cueflow-linux-arm64`
-- `cueflow-android-arm64-debug`
+- `cueflow-android-arm64-debug` — modern Qt 6.12 / Android 9+ / arm64-v8a.
+- `cueflow-android6-armv7-legacy-debug` — Qt 5.15.2 / Android 6-compatible / armeabi-v7a; separate package ID.
 - `cueflow-nixos-x86_64`
 
 The Linux `.tar.gz` contains a Qt-deployed application tree; it is not an AppImage and still expects compatible host system libraries plus a graphical session. In particular, a host may need `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). On NixOS, this tarball is not a drop-in portable package because it depends on the host's dynamic-library environment. The Android artifact is a debug-signed test APK (not the project’s permanent release-signing identity) and needs real-device testing. The NixOS artifact contains an exported Nix store closure; import it with the steps in `docs/NIXOS.md`.
@@ -64,3 +66,8 @@ The Android job installs matching Qt 6.12.0 Linux host tools separately from the
 ## NixOS artifact
 
 The `NixOS native package — x86_64-linux` job builds the Qt application as a Nix derivation and exports the complete runtime store closure. This is intentionally separate from the generic Linux deployment tarball, whose dependencies can be invisible to the NixOS dynamic loader. Download the `cueflow-nixos-x86_64` artifact, extract it, and follow `docs/NIXOS.md` to import the closure into `/nix/store` and launch the prebuilt binary without compiling on the local machine.
+
+
+## Legacy Android target
+
+Android 6 is not supported by the current Qt 6.12 build (the modern artifact requires Android 9/API 28). The dedicated `android-legacy-armv7` job compiles the same QML/C++ source with Qt 5.15.2 and produces an `armeabi-v7a` debug APK with a separate application ID. Because that line is older, treat the artifact as a compatibility build for a trusted local device—not as the preferred build for modern phones. The job must pass before the artifact should be installed.

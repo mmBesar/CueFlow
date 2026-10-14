@@ -499,6 +499,127 @@ jobs:
           retention-days: 7
 
 
+  android-legacy-armv7:
+    name: Legacy Android APK — Android 6+ (32-bit ARM)
+    runs-on: ubuntu-22.04
+    env:
+      QT_LEGACY_VERSION: '5.15.2'
+      ANDROID_NDK_VERSION: '21.3.6528147'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Java 8 for Qt 5.15's Android Gradle template
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Prepare diagnostic log directory
+        run: mkdir -p diagnostics
+
+      - name: Install Android 6-compatible SDK and NDK
+        run: |
+          set -euxo pipefail
+          sdkmanager --install \
+            'platform-tools' \
+            'platforms;android-31' \
+            'build-tools;31.0.0' \
+            "ndk;${ANDROID_NDK_VERSION}" 2>&1 | tee diagnostics/android6-sdk-install.log
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          "$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/ndk-build" --version
+
+      - name: Install aqtinstall
+        run: |
+          set -euxo pipefail
+          python3 -m pip install --disable-pip-version-check --upgrade pip
+          python3 -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4' \
+            2>&1 | tee diagnostics/aqt-setup.log
+          python3 -m aqt version
+
+      - name: Verify Qt 5.15.2 Android package availability
+        run: |
+          set -euxo pipefail
+          python3 -m aqt list-qt linux android --arch "$QT_LEGACY_VERSION" \
+            2>&1 | tee diagnostics/qt5-android-architectures.log
+
+      - name: Download Qt 5.15.2 Android toolchain
+        run: |
+          set -euxo pipefail
+          python3 -m aqt install-qt linux android "$QT_LEGACY_VERSION" android \
+            --outputdir "$RUNNER_TEMP/Qt" 2>&1 | tee diagnostics/qt5-android-install.log
+          QT_ROOT_DIR="$RUNNER_TEMP/Qt/$QT_LEGACY_VERSION/android"
+          test -x "$QT_ROOT_DIR/bin/qmake"
+          test -x "$QT_ROOT_DIR/bin/androiddeployqt"
+          echo "QT_LEGACY_ROOT=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+          echo "$QT_ROOT_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Configure and compile legacy APK
+        run: |
+          set -euxo pipefail
+          mkdir -p build-android6
+          cd build-android6
+          "$QT_LEGACY_ROOT/bin/qmake" "$GITHUB_WORKSPACE/android-legacy/CueFlow.pro" \
+            "CUEFLOW_BUILD_COMMIT=$GITHUB_SHA" \
+            'ANDROID_ABIS=armeabi-v7a' 2>&1 | tee ../diagnostics/qt5-qmake.log
+          make -j2 2>&1 | tee ../diagnostics/qt5-make.log
+          settings_file="$(find . -type f -name '*deployment-settings.json' -print -quit)"
+          if [[ -z "$settings_file" ]]; then
+            echo 'qmake did not generate Android deployment settings.' >&2
+            find . -maxdepth 4 -type f | sort >&2
+            exit 1
+          fi
+          "$QT_LEGACY_ROOT/bin/androiddeployqt" \
+            --input "$settings_file" \
+            --output "$PWD/android-build" \
+            --android-platform android-31 \
+            --jdk "$JAVA_HOME" \
+            --gradle 2>&1 | tee ../diagnostics/qt5-androiddeployqt.log
+
+      - name: Verify and stage Android 6 APK
+        run: |
+          set -euxo pipefail
+          apk="$(find build-android6/android-build -type f -name '*.apk' -print -quit)"
+          if [[ -z "$apk" ]]; then
+            echo 'No legacy APK found.' >&2
+            find build-android6 -type f -name '*.apk' -print >&2
+            exit 1
+          fi
+          tools="$ANDROID_SDK_ROOT/build-tools/31.0.0"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" \
+            2>&1 | tee diagnostics/qt5-apksigner-verify.log
+          "$tools/zipalign" -c -v 4 "$apk" \
+            2>&1 | tee diagnostics/qt5-zipalign-verify.log
+          "$tools/aapt" dump badging "$apk" | tee diagnostics/qt5-apk-badging.txt
+          grep -q "package: name='org.mmbesar.cueflow.legacy'" diagnostics/qt5-apk-badging.txt
+          grep -q "sdkVersion:'21'" diagnostics/qt5-apk-badging.txt
+          mkdir -p artifacts
+          cp "$apk" artifacts/CueFlow-android6-armv7-legacy-debug.apk
+
+      - name: Upload Android 6 legacy APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-android6-armv7-legacy-debug
+          path: artifacts/CueFlow-android6-armv7-legacy-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload legacy Android failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cueflow-android6-failure-diagnostics
+          path: |
+            diagnostics/**
+            build-android6/**/*.log
+            build-android6/**/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
   nixos-x86_64:
     name: NixOS native package — x86_64-linux
     runs-on: ubuntu-24.04

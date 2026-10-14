@@ -402,6 +402,44 @@ void SessionController::setThemeAccent(const QString &accent) {
     scheduleSaveSettings();
 }
 
+void SessionController::requestViewerFullscreenToggle() {
+    if (remoteMode_) {
+        QJsonObject command;
+        command.insert(QStringLiteral("name"), QStringLiteral("viewer_fullscreen_toggle"));
+        sendCommand(command);
+        return;
+    }
+    emit viewerFullscreenToggleRequested();
+}
+
+void SessionController::requestViewerControlsToggle() {
+    if (remoteMode_) {
+        QJsonObject command;
+        command.insert(QStringLiteral("name"), QStringLiteral("viewer_controls_toggle"));
+        sendCommand(command);
+        return;
+    }
+    emit viewerControlsToggleRequested();
+}
+
+void SessionController::setViewerFullscreenState(bool fullscreen) {
+    // Only the display owns its window state. The remote learns it from snapshots.
+    if (remoteMode_ || viewerFullscreen_ == fullscreen)
+        return;
+    viewerFullscreen_ = fullscreen;
+    emit viewerFullscreenChanged();
+    markDirty();
+}
+
+void SessionController::setViewerControlsVisibleState(bool visible) {
+    // Only the display owns its controls visibility. The remote learns it from snapshots.
+    if (remoteMode_ || viewerControlsVisible_ == visible)
+        return;
+    viewerControlsVisible_ = visible;
+    emit viewerControlsVisibleChanged();
+    markDirty();
+}
+
 void SessionController::setScript(const QString &markdown) {
     if (remoteMode_) {
         setDraftScript(markdown);
@@ -444,15 +482,26 @@ void SessionController::applyAutoBidi(QObject *quickTextDocument) {
         return;
 
     QTextDocument *document = wrapper->textDocument();
+    bool editBlockOpen = false;
     QTextCursor editCursor(document);
-    editCursor.beginEditBlock();
     for (QTextBlock block = document->begin(); block.isValid(); block = block.next()) {
         QTextBlockFormat format = block.blockFormat();
+        // QTextDocument can signal changes for block-format updates. The QML
+        // textChanged handler may call this method again, so skip paragraphs whose
+        // direction is already automatic. Open an edit block only if there's real
+        // work to do; an empty begin/end pair should never generate needless work.
+        if (format.layoutDirection() == Qt::LayoutDirectionAuto)
+            continue;
+        if (!editBlockOpen) {
+            editCursor.beginEditBlock();
+            editBlockOpen = true;
+        }
         format.setLayoutDirection(Qt::LayoutDirectionAuto);
         QTextCursor blockCursor(block);
         blockCursor.setBlockFormat(format);
     }
-    editCursor.endEditBlock();
+    if (editBlockOpen)
+        editCursor.endEditBlock();
 }
 
 void SessionController::onFrame() {
@@ -650,6 +699,20 @@ void SessionController::handleMessage(QTcpSocket *socket, const QJsonObject &obj
                 emit scrollRangeChanged();
             }
         }
+        if (object.contains(QStringLiteral("viewerFullscreen"))) {
+            const bool value = object.value(QStringLiteral("viewerFullscreen")).toBool();
+            if (viewerFullscreen_ != value) {
+                viewerFullscreen_ = value;
+                emit viewerFullscreenChanged();
+            }
+        }
+        if (object.contains(QStringLiteral("viewerControlsVisible"))) {
+            const bool value = object.value(QStringLiteral("viewerControlsVisible")).toBool();
+            if (viewerControlsVisible_ != value) {
+                viewerControlsVisible_ = value;
+                emit viewerControlsVisibleChanged();
+            }
+        }
         setStatus(QStringLiteral("Connected to display"));
     }
 }
@@ -695,6 +758,10 @@ void SessionController::handleCommand(const QJsonObject &command) {
             setScriptLocal(incoming);
         else
             setStatus(QStringLiteral("Script rejected: it exceeds the size limit"));
+    } else if (name == QStringLiteral("viewer_fullscreen_toggle")) {
+        emit viewerFullscreenToggleRequested();
+    } else if (name == QStringLiteral("viewer_controls_toggle")) {
+        emit viewerControlsToggleRequested();
     }
 }
 
@@ -709,6 +776,8 @@ void SessionController::sendSnapshot(QTcpSocket *socket, bool includeScript) {
     state.insert(QStringLiteral("fontSize"), fontSize_);
     state.insert(QStringLiteral("textWidth"), textWidth_);
     state.insert(QStringLiteral("scrollRange"), scrollRange_);
+    state.insert(QStringLiteral("viewerFullscreen"), viewerFullscreen_);
+    state.insert(QStringLiteral("viewerControlsVisible"), viewerControlsVisible_);
     if (includeScript)
         state.insert(QStringLiteral("script"), script_);
     writeJson(socket, state);

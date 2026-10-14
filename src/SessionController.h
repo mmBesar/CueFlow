@@ -38,6 +38,8 @@ class SessionController final : public QObject {
     Q_PROPERTY(double scrollRange READ scrollRange NOTIFY scrollRangeChanged)
     Q_PROPERTY(QString themeFlavor READ themeFlavor NOTIFY themeFlavorChanged)
     Q_PROPERTY(QString themeAccent READ themeAccent NOTIFY themeAccentChanged)
+    Q_PROPERTY(bool viewerFullscreen READ viewerFullscreen NOTIFY viewerFullscreenChanged)
+    Q_PROPERTY(bool viewerControlsVisible READ viewerControlsVisible NOTIFY viewerControlsVisibleChanged)
 
 public:
     explicit SessionController(QObject *parent = nullptr);
@@ -62,6 +64,8 @@ public:
     double scrollRange() const { return scrollRange_; }
     QString themeFlavor() const { return themeFlavor_; }
     QString themeAccent() const { return themeAccent_; }
+    bool viewerFullscreen() const { return viewerFullscreen_; }
+    bool viewerControlsVisible() const { return viewerControlsVisible_; }
 
     Q_INVOKABLE void setMode(const QString &mode);
     Q_INVOKABLE void startHosting();
@@ -80,6 +84,10 @@ public:
     Q_INVOKABLE void setScrollRange(double pixels);
     Q_INVOKABLE void setThemeFlavor(const QString &flavor);
     Q_INVOKABLE void setThemeAccent(const QString &accent);
+    Q_INVOKABLE void requestViewerFullscreenToggle();
+    Q_INVOKABLE void requestViewerControlsToggle();
+    Q_INVOKABLE void setViewerFullscreenState(bool fullscreen);
+    Q_INVOKABLE void setViewerControlsVisibleState(bool visible);
     Q_INVOKABLE void setScript(const QString &markdown);
     Q_INVOKABLE void sendDraftScript();
     Q_INVOKABLE void applyAutoBidi(QObject *quickTextDocument);
@@ -106,6 +114,10 @@ signals:
     void scrollRangeChanged();
     void themeFlavorChanged();
     void themeAccentChanged();
+    void viewerFullscreenChanged();
+    void viewerControlsVisibleChanged();
+    void viewerFullscreenToggleRequested();
+    void viewerControlsToggleRequested();
 
 private slots:
     void onFrame();
@@ -161,6 +173,8 @@ private:
     int textWidth_ = 88;
     QString themeFlavor_ = QStringLiteral("Macchiato");
     QString themeAccent_ = QStringLiteral("Mauve");
+    bool viewerFullscreen_ = false;
+    bool viewerControlsVisible_ = true;
     bool remoteMode_ = false;
     bool connected_ = false;
     bool dirty_ = false;

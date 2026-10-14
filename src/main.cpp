@@ -8,9 +8,15 @@
 #include <QIcon>
 #include <QDebug>
 #ifdef Q_OS_ANDROID
-#include <QJniObject>
 #include <QVariant>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QJniObject>
+#else
+#include <QtAndroid>
+#include <QAndroidJniObject>
 #endif
+#endif
+#include <QUrl>
 #include <cstdlib>
 
 #ifndef CUEFLOW_BUILD_COMMIT
@@ -22,19 +28,17 @@ namespace {
 void setKeepScreenOn(bool keepOn) {
 #ifdef Q_OS_ANDROID
     // FLAG_KEEP_SCREEN_ON is scoped to the foreground Activity's window.
-    // Apply it on Android's UI thread and clear it when CueFlow backgrounds.
+    // Qt 6 and Qt 5 expose different JNI dispatch helpers.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QNativeInterface::QAndroidApplication::runOnAndroidMainThread([keepOn]() -> QVariant {
         if (!QNativeInterface::QAndroidApplication::isActivityContext())
             return {};
-
         const QJniObject activity = QNativeInterface::QAndroidApplication::context();
         if (!activity.isValid())
             return {};
-
         const QJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
         if (!window.isValid())
             return {};
-
         constexpr jint KeepScreenOnFlag = 128; // WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         if (keepOn)
             window.callMethod<void>("addFlags", "(I)V", KeepScreenOnFlag);
@@ -42,6 +46,21 @@ void setKeepScreenOn(bool keepOn) {
             window.callMethod<void>("clearFlags", "(I)V", KeepScreenOnFlag);
         return {};
     });
+#else
+    QtAndroid::runOnAndroidThread([keepOn]() {
+        const QAndroidJniObject activity = QtAndroid::androidActivity();
+        if (!activity.isValid())
+            return;
+        const QAndroidJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+        if (!window.isValid())
+            return;
+        constexpr jint KeepScreenOnFlag = 128; // WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        if (keepOn)
+            window.callMethod<void>("addFlags", "(I)V", KeepScreenOnFlag);
+        else
+            window.callMethod<void>("clearFlags", "(I)V", KeepScreenOnFlag);
+    });
+#endif
 #else
     Q_UNUSED(keepOn);
 #endif
@@ -67,9 +86,13 @@ int main(int argc, char *argv[]) {
     SessionController session;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("session"), &session);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
     engine.loadFromModule(QStringLiteral("CueFlow"), QStringLiteral("Main"));
+#else
+    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+#endif
     // The Activity is available by the time the QML engine is loaded.
     setKeepScreenOn(true);
     return app.exec();
