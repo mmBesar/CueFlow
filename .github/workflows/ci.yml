@@ -509,11 +509,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Set up Java 8 for Qt 5.15's Android Gradle template
+      # The current Android command-line tools (installed by setup-android)
+      # require JDK 17+. Qt 5.15's generated Gradle project below is built
+      # with JDK 8, so set up the SDK under JDK 17 first and switch back later.
+      - name: Set up Java 17 for Android SDK tools
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '17'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4
@@ -557,6 +560,19 @@ jobs:
           test -x "$QT_ROOT_DIR/bin/androiddeployqt"
           echo "QT_LEGACY_ROOT=$QT_ROOT_DIR" >> "$GITHUB_ENV"
           echo "$QT_ROOT_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Switch to Java 8 for Qt 5.15 Gradle build
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Verify legacy Java toolchain
+        run: |
+          set -euxo pipefail
+          java -version 2>&1 | tee diagnostics/legacy-java-version.log
+          test "$(java -version 2>&1 | head -n 1)" != ""
+          printf 'JAVA_HOME=%s\n' "$JAVA_HOME"
 
       - name: Configure and compile legacy APK
         run: |
