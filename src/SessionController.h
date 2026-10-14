@@ -36,6 +36,8 @@ class SessionController final : public QObject {
     Q_PROPERTY(int fontSize READ fontSize NOTIFY fontSizeChanged)
     Q_PROPERTY(int textWidth READ textWidth NOTIFY textWidthChanged)
     Q_PROPERTY(double scrollRange READ scrollRange NOTIFY scrollRangeChanged)
+    Q_PROPERTY(QString themeFlavor READ themeFlavor NOTIFY themeFlavorChanged)
+    Q_PROPERTY(QString themeAccent READ themeAccent NOTIFY themeAccentChanged)
 
 public:
     explicit SessionController(QObject *parent = nullptr);
@@ -58,6 +60,8 @@ public:
     int fontSize() const { return fontSize_; }
     int textWidth() const { return textWidth_; }
     double scrollRange() const { return scrollRange_; }
+    QString themeFlavor() const { return themeFlavor_; }
+    QString themeAccent() const { return themeAccent_; }
 
     Q_INVOKABLE void setMode(const QString &mode);
     Q_INVOKABLE void startHosting();
@@ -74,6 +78,8 @@ public:
     Q_INVOKABLE void setFontSize(int points);
     Q_INVOKABLE void setTextWidth(int percent);
     Q_INVOKABLE void setScrollRange(double pixels);
+    Q_INVOKABLE void setThemeFlavor(const QString &flavor);
+    Q_INVOKABLE void setThemeAccent(const QString &accent);
     Q_INVOKABLE void setScript(const QString &markdown);
     Q_INVOKABLE void sendDraftScript();
     Q_INVOKABLE void applyAutoBidi(QObject *quickTextDocument);
@@ -98,6 +104,8 @@ signals:
     void fontSizeChanged();
     void textWidthChanged();
     void scrollRangeChanged();
+    void themeFlavorChanged();
+    void themeAccentChanged();
 
 private slots:
     void onFrame();
@@ -150,6 +158,8 @@ private:
     double scrollRange_ = 0.0;
     int fontSize_ = 44;
     int textWidth_ = 88;
+    QString themeFlavor_ = QStringLiteral("Macchiato");
+    QString themeAccent_ = QStringLiteral("Mauve");
     bool remoteMode_ = false;
     bool connected_ = false;
     bool dirty_ = false;

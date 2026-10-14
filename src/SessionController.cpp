@@ -10,9 +10,50 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QQuickTextDocument>
+#include <QStringList>
 
 #include <algorithm>
 #include <cmath>
+
+namespace {
+
+const QStringList &themeFlavorNames() {
+    static const QStringList values = {
+        QStringLiteral("Latte"), QString::fromUtf8("Frappé"),
+        QStringLiteral("Macchiato"), QStringLiteral("Mocha")
+    };
+    return values;
+}
+
+const QStringList &themeAccentNames() {
+    static const QStringList values = {
+        QStringLiteral("Rosewater"), QStringLiteral("Flamingo"),
+        QStringLiteral("Pink"), QStringLiteral("Mauve"),
+        QStringLiteral("Red"), QStringLiteral("Maroon"),
+        QStringLiteral("Peach"), QStringLiteral("Yellow"),
+        QStringLiteral("Green"), QStringLiteral("Teal"),
+        QStringLiteral("Sky"), QStringLiteral("Sapphire"),
+        QStringLiteral("Blue"), QStringLiteral("Lavender"),
+        QStringLiteral("Text"), QStringLiteral("Subtext 1"),
+        QStringLiteral("Subtext 0"), QStringLiteral("Overlay 2"),
+        QStringLiteral("Overlay 1"), QStringLiteral("Overlay 0"),
+        QStringLiteral("Surface 2"), QStringLiteral("Surface 1"),
+        QStringLiteral("Surface 0"), QStringLiteral("Base"),
+        QStringLiteral("Mantle"), QStringLiteral("Crust")
+    };
+    return values;
+}
+
+QString canonicalChoice(const QString &value, const QStringList &choices) {
+    const QString cleaned = value.trimmed();
+    for (const QString &choice : choices) {
+        if (choice.compare(cleaned, Qt::CaseInsensitive) == 0)
+            return choice;
+    }
+    return {};
+}
+
+} // namespace
 
 SessionController::SessionController(QObject *parent)
     : QObject(parent), model_(ScrollModel::kDefaultSpeedPixelsPerSecond) {
@@ -20,6 +61,7 @@ SessionController::SessionController(QObject *parent)
     refreshAddresses();
 
     frameTimer_.setInterval(16);
+    frameTimer_.setTimerType(Qt::PreciseTimer);
     connect(&frameTimer_, &QTimer::timeout, this, &SessionController::onFrame);
     connect(&server_, &QTcpServer::newConnection, this, &SessionController::acceptConnections);
     settingsSaveTimer_.setSingleShot(true);
@@ -65,6 +107,10 @@ void SessionController::loadSettings() {
     model_.setSpeed(settings.value(QStringLiteral("speed"), ScrollModel::kDefaultSpeedPixelsPerSecond).toDouble());
     fontSize_ = std::clamp(settings.value(QStringLiteral("fontSize"), 44).toInt(), 12, 120);
     textWidth_ = std::clamp(settings.value(QStringLiteral("textWidth"), 88).toInt(), 35, 100);
+    themeFlavor_ = canonicalChoice(settings.value(QStringLiteral("themeFlavor"), QStringLiteral("Macchiato")).toString(), themeFlavorNames());
+    if (themeFlavor_.isEmpty()) themeFlavor_ = QStringLiteral("Macchiato");
+    themeAccent_ = canonicalChoice(settings.value(QStringLiteral("themeAccent"), QStringLiteral("Mauve")).toString(), themeAccentNames());
+    if (themeAccent_.isEmpty()) themeAccent_ = QStringLiteral("Mauve");
     // Intentionally start at the beginning each time; script and reading preferences persist.
     model_.setProgress(0.0);
     model_.setPlaying(false);
@@ -76,6 +122,8 @@ void SessionController::saveSettings() {
     settings.setValue(QStringLiteral("speed"), model_.speed());
     settings.setValue(QStringLiteral("fontSize"), fontSize_);
     settings.setValue(QStringLiteral("textWidth"), textWidth_);
+    settings.setValue(QStringLiteral("themeFlavor"), themeFlavor_);
+    settings.setValue(QStringLiteral("themeAccent"), themeAccent_);
     settings.sync();
 }
 
@@ -318,7 +366,29 @@ void SessionController::setTextWidth(int percent) {
 }
 
 void SessionController::setScrollRange(double pixels) {
+    // Only the display can measure the authoritative scrollable range. A remote's
+    // local viewport is a different size and must never overwrite the host value.
+    if (remoteMode_)
+        return;
     setRangeLocal(std::max(0.0, pixels));
+}
+
+void SessionController::setThemeFlavor(const QString &flavor) {
+    const QString value = canonicalChoice(flavor, themeFlavorNames());
+    if (value.isEmpty() || themeFlavor_ == value)
+        return;
+    themeFlavor_ = value;
+    emit themeFlavorChanged();
+    scheduleSaveSettings();
+}
+
+void SessionController::setThemeAccent(const QString &accent) {
+    const QString value = canonicalChoice(accent, themeAccentNames());
+    if (value.isEmpty() || themeAccent_ == value)
+        return;
+    themeAccent_ = value;
+    emit themeAccentChanged();
+    scheduleSaveSettings();
 }
 
 void SessionController::setScript(const QString &markdown) {
@@ -379,7 +449,10 @@ void SessionController::onFrame() {
     frameClock_.restart();
     const double elapsed = static_cast<double>(ns) / 1'000'000'000.0;
     const bool wasPlaying = model_.playing();
-    if (model_.advance(elapsed, scrollRange_)) {
+
+    // The display is the sole playback clock. Advancing the remote's local model
+    // using its own (different) viewport range makes it drift between snapshots.
+    if (!remoteMode_ && model_.advance(elapsed, scrollRange_)) {
         emit progressChanged();
         dirty_ = true;
     }
@@ -388,7 +461,13 @@ void SessionController::onFrame() {
         dirty_ = true;
     }
 
-    if (dirty_ && broadcastClock_.elapsed() >= 33) {
+    // Tick locally at up to 125 Hz during playback for smoother fractional-pixel
+    // movement, but keep idle/remote sessions at 16 ms to avoid needless wakeups.
+    const int desiredInterval = (!remoteMode_ && model_.playing()) ? 8 : 16;
+    if (frameTimer_.interval() != desiredInterval)
+        frameTimer_.setInterval(desiredInterval);
+
+    if (dirty_ && broadcastClock_.elapsed() >= 16) {
         if (!remoteMode_ && hostPeer_ && authenticatedPeers_.contains(hostPeer_))
             sendSnapshot(hostPeer_, dirtyScript_);
         dirty_ = false;

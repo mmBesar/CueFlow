@@ -11,7 +11,7 @@ Build a clean native-first application using Qt 6 / Qt Quick (QML) with a small 
 - Markdown editor with a one-tap return to playback.
 - Continuous scroll with speed expressed in px/s.
 - Direct progress scrub, small pixel nudges, play/pause, reset, adjustable font and line width.
-- Fullscreen with controls that can be dimmed/hidden.
+- Fullscreen with compact controls that auto-hide after inactivity and return on touch/click.
 - Script and preferences saved locally.
 - Start/stop a temporary LAN control session only when requested.
 
@@ -23,7 +23,7 @@ Build a clean native-first application using Qt 6 / Qt Quick (QML) with a small 
 
 ## Scroll model
 
-The core stores normalized progress `p ∈ [0, 1]`, speed `v` in rendered pixels/second, and the current scroll range `R`. For elapsed time `dt`, advancement is `p += v * dt / R`, clamped to `[0, 1]`. QML animates by rendering the updated position at the display refresh cadence. This makes motion independent of timer frequency and avoids the current one-pixel/zero-duration animation loop. Seeking updates the normalized progress continuously; small nudges add `deltaPixels / R`.
+The core stores normalized progress `p ∈ [0, 1]`, speed `v` in rendered pixels/second, and the current scroll range `R`. For elapsed time `dt`, advancement is `p += v * dt / R`, clamped to `[0, 1]`. The precise 16 ms controller timer updates the QML Flickable position; the presentation cadence remains constrained by the platform render loop. This makes motion independent of timer frequency and avoids the current one-pixel/zero-duration animation loop. Seeking updates the normalized progress continuously; small nudges add `deltaPixels / R`.
 
 Frame pauses are capped at 50 ms, so backgrounding the app or hitting a breakpoint will not jump far through the script when the timer runs again. A later hardening pass must pause explicitly on Android lifecycle transitions and resume only by policy/user intent.
 
@@ -55,16 +55,17 @@ Do not claim perfect Arabic/BiDi support until this has been tested visually on 
 - Add QtTest protocol tests and a fake-clock scrolling test.
 - Verify Arabic/English rendering and correct content height.
 - Run display/remote locally and across two LAN devices.
+- Verify that the remote never advances playback independently and layout reflow cannot turn the current offset into an accidental end-of-script seek.
 
 ### M2 — polish and protocol
 - PIN expiration/throttling, QR pairing, and mDNS discovery.
 - Reconnection and stale-session handling.
 - TLS or another authenticated encrypted transport before use on untrusted networks.
-- Keyboard/remote hotkeys, focus dimming, screen-awake behavior.
+- Keyboard/remote hotkeys, focus dimming.
 
 ### M3 — Android
 - Build Android arm64 package.
-- Screen-on/wake-lock lifecycle handling, orientation support, sensible mobile controls, Android back-key behavior, and app-resume behavior.
+- Orientation support, Android back-key behavior, and deeper lifecycle handling remain future work. Android foreground screen-on handling and compact auto-hiding controls are now implemented; verify on a physical device.
 - Real-device test in both display and remote roles.
 
 ### M4 — packaging and architecture coverage
