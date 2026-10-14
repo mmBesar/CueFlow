@@ -117,7 +117,12 @@ fi
 
 # The install tree already contains Qt's CMake-generated deployment of Qt/QML.
 # linuxdeploy adds missing ELF dependencies and the Qt plugin completes QML/plugin
-# collection. The generated AppRun above remains the entry point.
+# collection. Keep EGL/GL/DRM/GBM and Wayland client libraries from the host: they
+# are part of the system's graphics-driver/window-system stack and bundling them can
+# both fail on clean builders and break runtime driver compatibility. The system
+# supplies these libraries on graphical Linux desktops (AppImage upstream excludes
+# the same classes of driver libraries for this reason).
+# The generated AppRun above remains the entry point.
 log "Deploying Qt/QML and ELF dependencies for $architecture"
 # Pass the original staged executable so linuxdeploy can enumerate its ELF
 # dependencies. Remove the copied target first to avoid a same-file copy.
@@ -126,6 +131,14 @@ rm -f "$appdir/usr/bin/cueflow"
     --executable "$stage_dir/bin/cueflow" \
     --desktop-file "$repo_root/packaging/linux/cueflow.desktop" \
     --icon-file "$repo_root/packaging/linux/cueflow.svg" \
+    --exclude-library 'libEGL.so*' \
+    --exclude-library 'libGL.so*' \
+    --exclude-library 'libGLX.so*' \
+    --exclude-library 'libGLdispatch.so*' \
+    --exclude-library 'libOpenGL.so*' \
+    --exclude-library 'libgbm.so*' \
+    --exclude-library 'libdrm.so*' \
+    --exclude-library 'libwayland-*.so*' \
     --plugin qt
 
 # linuxdeploy may create its own AppRun wrapper. Reassert our known entry point

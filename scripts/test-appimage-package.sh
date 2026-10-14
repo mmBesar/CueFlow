@@ -56,17 +56,27 @@ PLUGIN
         cat > "$out" <<'DEPLOY'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-appdir=''; executable=''; desktop=''; icon=''
+appdir=''; executable=''; desktop=''; icon=''; excluded_egl=no; exclude_count=0
 while (( $# )); do
     case "$1" in
         --appdir) appdir="$2"; shift 2 ;;
         --executable) executable="$2"; shift 2 ;;
         --desktop-file) desktop="$2"; shift 2 ;;
         --icon-file) icon="$2"; shift 2 ;;
+        --exclude-library)
+            case "$2" in
+                'libEGL.so*') excluded_egl=yes ;;
+                'libGL.so*'|'libGLX.so*'|'libGLdispatch.so*'|'libOpenGL.so*'|'libgbm.so*'|'libdrm.so*'|'libwayland-*.so*') ;;
+                *) echo "unexpected fake exclude pattern: $2" >&2; exit 2 ;;
+            esac
+            exclude_count=$((exclude_count + 1))
+            shift 2 ;;
         --plugin) shift 2 ;;
         *) echo "unexpected fake linuxdeploy argument: $1" >&2; exit 2 ;;
     esac
 done
+test "$excluded_egl" = yes || { echo 'libEGL was not excluded from AppDir dependency deployment' >&2; exit 3; }
+test "$exclude_count" -eq 8 || { echo "expected eight graphics-stack exclusions, got $exclude_count" >&2; exit 3; }
 test -x "$executable"
 test -x "$appdir/AppRun"
 test -x "$(dirname -- "$0")/linuxdeploy-plugin-qt-$(uname -m).AppImage"
