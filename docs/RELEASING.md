@@ -4,7 +4,7 @@ CueFlow development CI artifacts are short-lived test builds. User-facing releas
 
 ## Platforms currently packaged
 
-- Linux `x86_64` and `aarch64`: native Qt/QML bundle plus `install.sh`/`uninstall.sh` for a per-user install. It does not require root privileges. The bundle still relies on the host graphics stack and some system libraries; it is not a universal AppImage.
+- Linux `x86_64` and `aarch64`: a standalone AppImage plus a Qt/QML tarball with `install.sh`/`uninstall.sh` for a per-user install. The tarball install does not require root privileges. AppImages bundle the Qt/QML runtime and most application-side libraries, but still depend on host glibc and the graphics/display stack; compatibility should be tested on older distributions. Keep the tarball as a fallback if an AppImage does not run on a host.
 - Android modern: Qt 6, `arm64-v8a`, Android 9/API 28 and newer.
 - Android legacy: Qt 5.15.2, `armeabi-v7a`, Android 5/API 21 and newer (including Android 6 devices, subject to device ABI support).
 - NixOS: x86_64 exported Nix store closure with the matching store-path and build metadata. A normal Nix flake build also supports x86_64 and aarch64.
@@ -38,6 +38,6 @@ Copy the base64 file's contents into the first secret. Do not put the keystore o
 2. Confirm branch CI is green, particularly both Android jobs. Test the modern APK on a current phone and the legacy APK on a real Android 6-era device; CI compilation alone is not device acceptance.
 3. Ensure all four Android signing secrets above are configured.
 4. Commit the version change, then create and push a matching tag, for example `git tag -a v0.1.0 -m 'CueFlow 0.1.0' && git push origin v0.1.0`.
-5. The workflow builds all current targets, signs and verifies the release APKs, generates SHA-256 checksums, and creates a **draft** GitHub Release. Inspect its assets and release notes, test the downloaded packages, then publish the draft manually.
+5. The workflow builds all current targets, packages AppImages for x86_64 and aarch64, signs and verifies the release APKs, generates SHA-256 checksums, and creates a **draft** GitHub Release. Inspect its assets and release notes, test the AppImages on both architectures (and preferably an older glibc-based distribution), test the tarball installers, test the APKs on real devices, then publish the draft manually.
 
 A tag must match the `project(CueFlow VERSION ...)` value in `CMakeLists.txt`; this prevents accidentally publishing artifacts with inconsistent versions. Release assets include `SHA256SUMS` for integrity checking.

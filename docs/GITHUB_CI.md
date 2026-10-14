@@ -43,11 +43,13 @@ A successful workflow uploads these seven-day development artifacts:
 
 - `cueflow-linux-amd64` — Qt-deployed Linux bundle plus per-user installer and desktop launcher.
 - `cueflow-linux-arm64` — same bundle for aarch64.
+- `cueflow-appimage-amd64` — one-file x86_64 AppImage, packaged from the successful Linux deployment bundle.
+- `cueflow-appimage-arm64` — one-file aarch64 AppImage, packaged from the successful ARM64 Linux deployment bundle.
 - `cueflow-android-arm64-debug` — modern Qt 6.12 / Android 9+ / arm64-v8a.
 - `cueflow-android6-armv7-legacy-debug` — Qt 5.15.2 / Android 6-compatible / armeabi-v7a; separate package ID.
 - `cueflow-nixos-x86_64`
 
-The Linux `.tar.gz` includes `AppRun`, an icon, `install.sh`, and `uninstall.sh`; run `./install.sh` from the extracted bundle for a per-user install. It is not an AppImage and still expects compatible host system libraries plus a graphical session. In particular, a host may need `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). On NixOS, this tarball is not a drop-in portable package because it depends on the host's dynamic-library environment. The Android artifacts produced by ordinary CI are debug-signed test APKs (not the project's permanent release-signing identity) and need real-device testing. The NixOS artifact contains an exported Nix store closure; import it with the steps in `docs/NIXOS.md`.
+The Linux `.tar.gz` includes `AppRun`, an icon, `install.sh`, and `uninstall.sh`; run `./install.sh` from the extracted bundle for a per-user install. AppImage artifacts bundle Qt/QML and most app-side libraries in a single executable file. They still depend on a compatible host glibc and graphics/display stack; on older systems, test compatibility rather than assuming the AppImage is universal. If the AppImage does not launch, the tarball remains available as an alternative, though it too needs host system libraries such as `libxkbcommon.so.0` (`libxkbcommon0` on Debian/Ubuntu; `libxkbcommon` on Fedora/Arch). Neither generic Linux package is a drop-in NixOS package because NixOS has a different dynamic-library environment. The Android artifacts produced by ordinary CI are debug-signed test APKs (not the project's permanent release-signing identity) and need real-device testing. The NixOS artifact contains an exported Nix store closure; import it with the steps in `docs/NIXOS.md`.
 
 ## Known limits
 

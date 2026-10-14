@@ -47,6 +47,9 @@ jobs:
       - name: Test Linux bundle archive validation
         run: bash ./scripts/test-linux-package.sh
 
+      - name: Test AppImage packaging control flow
+        run: bash ./scripts/test-appimage-package.sh
+
   core-arm64:
     name: Core tests — Linux arm64
     runs-on: ubuntu-24.04-arm
@@ -77,6 +80,9 @@ jobs:
 
       - name: Run standalone scroll tests
         run: bash ./scripts/test-scroll-model.sh
+
+      - name: Test AppImage packaging control flow
+        run: bash ./scripts/test-appimage-package.sh
 
   linux-amd64:
     name: Qt desktop build — Linux amd64
@@ -332,6 +338,118 @@ jobs:
             build/CMakeFiles/CMakeOutput.log
             build/**/*.log
           if-no-files-found: warn
+          retention-days: 7
+
+  appimage-amd64:
+    name: AppImage package — Linux x86_64
+    needs: linux-amd64
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python for Qt installer
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install Qt qmake and resources for AppImage deployment
+        run: |
+          set -euxo pipefail
+          python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir "$RUNNER_TEMP/Qt"
+          QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
+          test -n "$QT_CONFIG"
+          QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
+          test -x "$QT_ROOT_DIR/bin/qmake"
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+
+      - name: Download Linux x86_64 deployment bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-linux-amd64
+          path: fetched
+
+      - name: Extract and build AppImage
+        run: |
+          set -euxo pipefail
+          mkdir -p stage
+          archive="$(find fetched -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$archive" && test -s "$archive"
+          tar -xzf "$archive" -C stage
+          source_version="$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            test "$version" = "$source_version"
+          else
+            version="${source_version}-dev+${GITHUB_SHA:0:7}"
+          fi
+          ./scripts/package-appimage.sh \
+            "$PWD/stage" "$PWD/CueFlow-Linux-x86_64-${version}.AppImage" \
+            "$version" x86_64 "$GITHUB_SHA"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cueflow-appimage-amd64
+          path: CueFlow-Linux-x86_64-*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
+  appimage-arm64:
+    name: AppImage package — Linux aarch64
+    needs: linux-arm64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python for Qt installer
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install Qt qmake and resources for AppImage deployment
+        run: |
+          set -euxo pipefail
+          python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
+          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 --outputdir "$RUNNER_TEMP/Qt"
+          QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
+          test -n "$QT_CONFIG"
+          QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
+          test -x "$QT_ROOT_DIR/bin/qmake"
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+
+      - name: Download Linux aarch64 deployment bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-linux-arm64
+          path: fetched
+
+      - name: Extract and build AppImage
+        run: |
+          set -euxo pipefail
+          mkdir -p stage
+          archive="$(find fetched -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$archive" && test -s "$archive"
+          tar -xzf "$archive" -C stage
+          source_version="$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            test "$version" = "$source_version"
+          else
+            version="${source_version}-dev+${GITHUB_SHA:0:7}"
+          fi
+          ./scripts/package-appimage.sh \
+            "$PWD/stage" "$PWD/CueFlow-Linux-aarch64-${version}.AppImage" \
+            "$version" aarch64 "$GITHUB_SHA"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cueflow-appimage-arm64
+          path: CueFlow-Linux-aarch64-*.AppImage
+          if-no-files-found: error
           retention-days: 7
 
   android-arm64:
@@ -828,6 +946,8 @@ jobs:
       - core-arm64
       - linux-amd64
       - linux-arm64
+      - appimage-amd64
+      - appimage-arm64
       - android-arm64
       - android-legacy-armv7
       - nixos-x86_64
@@ -850,6 +970,18 @@ jobs:
         with:
           name: cueflow-linux-arm64
           path: fetched/linux-arm64
+
+      - name: Download Linux x86_64 AppImage
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-appimage-amd64
+          path: fetched/appimage-amd64
+
+      - name: Download Linux aarch64 AppImage
+        uses: actions/download-artifact@v8
+        with:
+          name: cueflow-appimage-arm64
+          path: fetched/appimage-arm64
 
       - name: Download modern Android test APK
         uses: actions/download-artifact@v8
@@ -891,6 +1023,13 @@ jobs:
             "release-assets/CueFlow-Linux-x86_64-${GITHUB_REF_NAME}.tar.gz"
           cp "fetched/linux-arm64/cueflow-linux-arm64.tar.gz" \
             "release-assets/CueFlow-Linux-aarch64-${GITHUB_REF_NAME}.tar.gz"
+          appimage_x86="$(find fetched/appimage-amd64 -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          appimage_arm="$(find fetched/appimage-arm64 -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_x86" && test -s "$appimage_x86"
+          test -n "$appimage_arm" && test -s "$appimage_arm"
+          cp "$appimage_x86" "release-assets/CueFlow-Linux-x86_64-${GITHUB_REF_NAME}.AppImage"
+          cp "$appimage_arm" "release-assets/CueFlow-Linux-aarch64-${GITHUB_REF_NAME}.AppImage"
+          chmod 0755 release-assets/*.AppImage
           tar -czf "release-assets/CueFlow-NixOS-x86_64-${GITHUB_REF_NAME}.tar.gz" -C fetched/nixos .
           cp docs/NIXOS.md "release-assets/CueFlow-NixOS-INSTALL-${GITHUB_REF_NAME}.md"
 
@@ -964,10 +1103,12 @@ jobs:
           CueFlow release downloads
 
           Linux x86_64 / aarch64:
-            1. Download and extract the matching Linux .tar.gz archive.
-            2. Run ./install.sh from the extracted directory (no sudo required).
-            3. Launch CueFlow from your desktop application menu.
-            The generic Linux bundle still requires compatible host graphics drivers and system libraries.
+            AppImage (one-file option): make the matching .AppImage executable, then run it.
+            Example: chmod +x CueFlow-Linux-x86_64-${GITHUB_REF_NAME}.AppImage
+                     ./CueFlow-Linux-x86_64-${GITHUB_REF_NAME}.AppImage
+            Or use the matching .tar.gz archive and run ./install.sh (no sudo required).
+            AppImages bundle the Qt/QML runtime but still require compatible host graphics/display
+            drivers and a sufficiently recent glibc; test on older distributions before publishing.
 
           Android:
             Install CueFlow-Android-arm64 APK on Android 9+ arm64-v8a devices.
@@ -992,10 +1133,12 @@ jobs:
           body: |
             CueFlow ${{ steps.version.outputs.version }} draft release. Review the generated assets and test them before publishing.
 
-            Linux archives include a per-user installer (`./install.sh`) and do not require sudo. Android APKs are signed with the configured release key. The NixOS archive is a separate exported store closure; follow its attached install guide.
+            Linux downloads include standalone AppImages for x86_64 and aarch64, plus .tar.gz archives with a per-user installer. AppImages still depend on a compatible host graphics stack and glibc. Android APKs are signed with the configured release key. The NixOS archive is a separate exported store closure; follow its attached install guide.
           files: |
             release-assets/CueFlow-Linux-x86_64-${{ github.ref_name }}.tar.gz
             release-assets/CueFlow-Linux-aarch64-${{ github.ref_name }}.tar.gz
+            release-assets/CueFlow-Linux-x86_64-${{ github.ref_name }}.AppImage
+            release-assets/CueFlow-Linux-aarch64-${{ github.ref_name }}.AppImage
             release-assets/CueFlow-Android-arm64-${{ github.ref_name }}.apk
             release-assets/CueFlow-Android6-armv7-${{ github.ref_name }}.apk
             release-assets/CueFlow-NixOS-x86_64-${{ github.ref_name }}.tar.gz

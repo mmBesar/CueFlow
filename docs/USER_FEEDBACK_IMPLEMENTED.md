@@ -84,9 +84,9 @@ This pass targets the first device tests and deliberately skips the app icon as 
 
 ## Implemented in source
 
-- The main editor now uses narrow phone margins and a single compact heading instead of spending two rows on title/help text. Its TextArea fills the remaining height and gets wider margins/larger text on desktop. Clear, Back, and Apply labels shorten on very narrow windows.
-- Display and remote tuning sliders are collapsed behind a `Tune` action below 760 px and each mode remembers its own expanded state. Display actions reflow into two columns on narrow phones. Remote nudge buttons, fullscreen/controls labels, margins, and editor height adapt to phone-sized layouts.
-- Corrected the floating glyphs' optical horizontal position by shifting the icons left independently; the button hit targets and dock positions remain unchanged.
+- The main editor now uses narrow phone margins and a single compact heading instead of spending two rows on title/help text. Its border belongs to the fixed ScrollView viewport rather than the content-sized TextArea, and the text has a deeper top inset so placeholder/script lines stay clear of the frame. The editor fills the remaining height. Clear, Back, and Apply labels shorten on very narrow windows.
+- Display and remote tuning sliders are collapsed behind a `Tune` action on desktop and below 760 px on small screens; each mode remembers its own expanded state. Desktop mode tabs and primary controls use compact natural-width layouts instead of filling the whole window with touch-style targets. Android retains large touch targets. The wide desktop remote view caps the connection/control column and gives the script editor most of the horizontal space. Display actions reflow into two columns on narrow phones.
+- Corrected the floating glyphs' optical horizontal position by shifting the icons left independently; the button hit targets and dock positions remain unchanged. The active Enable Remote button uses Catppuccin green with contrasting text while hosting is enabled.
 - Desktop Space toggles play/pause in both display and remote mode, except while a script/address/PIN field or modal appearance dialog is active. Left/right nudges do not steal arrow keys from the remote editor/connection fields. Escape exits fullscreen rather than unexpectedly resetting playback.
 - A completed tap on the Android reading surface toggles playback only while the display is in fullscreen. Normal-mode interactions and edit fields are not bound to that gesture.
 - Added a Linux per-user bundle installer/launcher/icon plus uninstall script, a tag-based draft-release job, stable Android release-key signing, and SHA-256 checksums. The release job deliberately stops if signing secrets are not configured rather than publishing debug-signed APKs as production releases.
@@ -94,8 +94,8 @@ This pass targets the first device tests and deliberately skips the app icon as 
 ## Verification performed in the editing environment
 
 - The QML and workflow sources were edited and inspected locally, but Qt/QML runtime tools are not installed in this environment, so this pass has not been Qt-built or rendered on a device.
-- Shell syntax, workflow YAML syntax, archive packaging, and the existing dependency-free ScrollModel tests must all pass before treating the submitted source as ready. The Android fullscreen tap and exact icon alignment especially need confirmation on the same phone that previously exposed the issue.
-- Release keystore secrets must be configured on GitHub before pushing a release tag. The generic Linux bundle is not a universal AppImage and no Windows/macOS builds are added by this pass.
+- Passed locally: shell syntax checks, workflow YAML parsing and embedded shell checks, mocked AppImage packaging control flow, the large-archive validation regression test, dependency-free ScrollModel tests, CMake core build, and CTest. The AppImage control-flow test uses mocked downloader/tool binaries; it is not a real AppImage build. The Android fullscreen tap and exact icon alignment especially need confirmation on the same phone that previously exposed the issue.
+- Release keystore secrets must be configured on GitHub before pushing a release tag. Linux x86_64 and aarch64 have one-file AppImage targets as well as the installable tarball fallback. The separate AppImage jobs reinstall the matching Qt toolchain so `linuxdeploy-plugin-qt` has `qmake` available on its own runner. AppImages are not universal and are not drop-in NixOS packages. No Windows/macOS builds are added by this pass.
 
 
 # Keyboard navigation and speed controls — 2026-10-14

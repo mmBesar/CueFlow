@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CueFlow
+Comment=Markdown teleprompter with remote control
+Exec=cueflow
+Icon=cueflow
+Terminal=false
+Categories=Utility;Office;
+StartupWMClass=CueFlow
