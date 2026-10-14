@@ -2,6 +2,10 @@
 
 CueFlow is a proposed native-first successor to PrompterNG. It is a new project scaffold, not a patch to the existing repository.
 
+## NixOS
+
+For local development, a Nix flake provides the Qt build environment (`nix develop`, then see [`docs/NIXOS.md`](docs/NIXOS.md)). For users who do not want to build locally, the GitHub Actions workflow also exports a prebuilt Nix store closure as the `cueflow-nixos-x86_64` artifact.
+
 ## Goals
 
 - One application that can be either **Display** or **Remote**.
@@ -14,7 +18,7 @@ CueFlow is a proposed native-first successor to PrompterNG. It is a new project 
 
 ## Current status
 
-This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64 and arm64, and builds/tests the Qt application on amd64 and arm64 plus an Android arm64-v8a APK. The workflow uses five individually named jobs, with Qt installation commands split into normal workflow steps to make installer logs easier to inspect. RISC-V is temporarily disabled. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, and power management. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
+This is an initial engineering prototype/scaffold. The included GitHub Actions workflow runs core unit tests on Linux amd64 and arm64, and builds/tests the Qt application on amd64 and arm64 plus an Android arm64-v8a APK. The workflow uses individually named jobs, with Qt installation commands split into normal workflow steps to make installer logs easier to inspect. RISC-V is temporarily disabled. The GUI is still a prototype: CI compilation is not a substitute for real-device tests of Arabic/English BiDi, live seeking, remote sessions, and power management. Successful Qt builds are staged with Qt's deployment tooling and attached to the workflow as downloadable Linux test bundles. These are for compatible Linux desktop systems, not yet universal AppImages or polished release packages.
 
 The first pairing flow is deliberately manual: start a session on the display, then enter one of the displayed LAN addresses, port `47773`, and the six-digit PIN on the remote. In this prototype, that PIN remains valid until hosting is stopped; expiry, attempt throttling, QR pairing, service discovery, TLS, Android power management, and packaging are planned follow-up work. Keep the prototype on a trusted LAN; the initial TCP transport is not encrypted and must not be exposed to the public Internet.
 
@@ -35,9 +39,9 @@ The display device is authoritative for playback. The remote sends intent (toggl
 
 ## GitHub-first development
 
-After this project is pushed to GitHub, every push and pull request will run `.github/workflows/ci.yml`. You do not need a local C++ compiler or Qt installation to verify a change: open the repository's **Actions** tab to inspect build and test results. Successful Qt builds attach short-lived, downloadable Linux test bundles containing the application and its Qt/QML runtime. These are not universal AppImages; the host still needs compatible system libraries and a Linux graphical session. The CI workflow builds an Android arm64-v8a APK; it is an unsigned development artifact, not a release-ready package.
+After this project is pushed to GitHub, every push and pull request will run `.github/workflows/ci.yml`. You do not need a local C++ compiler or Qt installation to verify a change: open the repository's **Actions** tab to inspect build and test results. Successful Qt builds attach short-lived, downloadable Linux test bundles containing the application and its Qt/QML runtime. These are not universal AppImages; the host still needs compatible system libraries and a Linux graphical session. The CI workflow builds a debug-signed Android arm64-v8a test APK; it is not a release signing identity. A separate NixOS job builds a Nix-native package and exports its complete store closure so it can be imported and run on NixOS without compiling locally.
 
-The downloadable Linux tarballs are Qt-deployed test bundles, not self-contained AppImages. They still need host runtime libraries for the window system and graphics stack. For example, if startup reports `libxkbcommon.so.0` missing, install the package that provides it (`libxkbcommon0` on Debian/Ubuntu, `libxkbcommon` on Fedora/Arch). On NixOS or other systems without conventional system library paths, this tarball is not a drop-in portable package; it needs distro-native packaging or a deliberately bundled app format.
+The downloadable Linux tarballs are Qt-deployed test bundles, not self-contained AppImages. They still need host runtime libraries for the window system and graphics stack. For example, startup can fail if `libxkbcommon.so.0` is unavailable. On NixOS, use the dedicated `cueflow-nixos-x86_64` Actions artifact; the generic Linux tarball is not a drop-in NixOS package.
 
 The scroll model can be tested without Qt by configuring the core-only build:
 

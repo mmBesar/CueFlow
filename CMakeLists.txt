@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 option(CUEFLOW_BUILD_APP "Build the Qt Quick application" ON)
+option(CUEFLOW_DEPLOY_QT_RUNTIME "Bundle Qt libraries and QML imports in the desktop install tree" ON)
 include(CTest)
 
 # Keep the playback core testable without installing Qt. This is useful for
@@ -45,18 +46,32 @@ if(CUEFLOW_BUILD_APP)
         Qt6::QuickControls2
     )
 
+    # Android 16 KB page-size compatibility. Qt 6.12 supports Android 16,
+    # but this app is built with NDK r27, where 16 KB ELF alignment must be
+    # requested explicitly for application-owned shared objects.
+    if(ANDROID)
+        target_link_options(cueflow PRIVATE
+            "-Wl,-z,max-page-size=16384"
+            "-Wl,-z,common-page-size=16384"
+        )
+    endif()
+
     # qt_add_executable() creates a normal executable on desktop platforms,
     # but a MODULE library on Android. Do not use a desktop RUNTIME install
     # rule for that Android module: the APK target handles Android packaging.
     if(NOT ANDROID)
         install(TARGETS cueflow RUNTIME DESTINATION bin)
 
-        # Produce a Linux install tree with the Qt runtime and QML imports.
-        qt_generate_deploy_qml_app_script(
-            TARGET cueflow
-            OUTPUT_SCRIPT deploy_script
-            NO_UNSUPPORTED_PLATFORM_ERROR
-        )
-        install(SCRIPT ${deploy_script})
+        # Generic Linux CI artifacts use a Qt deployment tree. Nix packages
+        # should instead use the Qt libraries in the Nix store and disable this
+        # copy-based deployment step with -DCUEFLOW_DEPLOY_QT_RUNTIME=OFF.
+        if(CUEFLOW_DEPLOY_QT_RUNTIME)
+            qt_generate_deploy_qml_app_script(
+                TARGET cueflow
+                OUTPUT_SCRIPT deploy_script
+                NO_UNSUPPORTED_PLATFORM_ERROR
+            )
+            install(SCRIPT ${deploy_script})
+        endif()
     endif()
 endif()
