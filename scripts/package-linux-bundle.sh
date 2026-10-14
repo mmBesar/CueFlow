@@ -57,7 +57,17 @@ INFO
 mkdir -p "$(dirname -- "$output_file")"
 log "Creating $output_file"
 tar -czf "$output_file" -C "$package_root" .
-tar -tzf "$output_file" | grep -Eq '(^|/)bin/cueflow$' || die 'Archive validation failed: bin/cueflow is not present.'
-tar -tzf "$output_file" | grep -qx './install.sh' || die 'Archive validation failed: installer is not present.'
 [[ -s "$output_file" ]] || die 'Output archive is empty.'
+
+# Do not pipe tar directly into grep -q here. With `set -o pipefail`, grep can
+# exit immediately after finding a match, closing the pipe while tar is still
+# writing its listing. Tar then gets SIGPIPE / a broken pipe and the successful
+# match is incorrectly reported as a failed validation (especially on bundles
+# containing many Qt files). Materialize the small listing first, then inspect it.
+archive_listing="$work_dir/archive-list.txt"
+if ! tar -tzf "$output_file" > "$archive_listing"; then
+    die 'Archive validation failed: cannot read the generated archive.'
+fi
+grep -Eq '^(\./)?bin/cueflow$' "$archive_listing" || die 'Archive validation failed: bin/cueflow is not present.'
+grep -Eq '^(\./)?install\.sh$' "$archive_listing" || die 'Archive validation failed: installer is not present.'
 log "Created $(du -h "$output_file" | cut -f1) archive for $architecture ($version, ${commit:0:12})."

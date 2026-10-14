@@ -44,6 +44,9 @@ jobs:
       - name: Run standalone scroll tests
         run: bash ./scripts/test-scroll-model.sh
 
+      - name: Test Linux bundle archive validation
+        run: bash ./scripts/test-linux-package.sh
+
   core-arm64:
     name: Core tests — Linux arm64
     runs-on: ubuntu-24.04-arm
