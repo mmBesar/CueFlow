@@ -11,7 +11,9 @@
       pkgsFor = system: import nixpkgs { inherit system; };
 
       packageFor = system:
-        let pkgs = pkgsFor system;
+        let
+          pkgs = pkgsFor system;
+          buildCommit = if self ? rev then self.rev else if self ? dirtyRev then self.dirtyRev else "unknown";
         in pkgs.stdenv.mkDerivation {
           pname = "cueflow";
           version = "0.1.0";
@@ -35,6 +37,7 @@
             "-DCUEFLOW_BUILD_APP=ON"
             "-DCUEFLOW_DEPLOY_QT_RUNTIME=OFF"
             "-DBUILD_TESTING=ON"
+            "-DCUEFLOW_BUILD_COMMIT=${buildCommit}"
           ];
 
           doCheck = true;

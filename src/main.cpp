@@ -6,11 +6,16 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
+#include <QDebug>
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
 #include <QVariant>
 #endif
 #include <cstdlib>
+
+#ifndef CUEFLOW_BUILD_COMMIT
+#define CUEFLOW_BUILD_COMMIT "unknown"
+#endif
 
 namespace {
 
@@ -49,6 +54,7 @@ int main(int argc, char *argv[]) {
     QCoreApplication::setApplicationName(QStringLiteral("CueFlow"));
     QCoreApplication::setOrganizationName(QStringLiteral("mmBesar"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0-dev"));
+    qInfo().noquote() << "CueFlow build commit:" << CUEFLOW_BUILD_COMMIT;
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
 #ifdef Q_OS_ANDROID

@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 option(CUEFLOW_BUILD_APP "Build the Qt Quick application" ON)
 option(CUEFLOW_DEPLOY_QT_RUNTIME "Bundle Qt libraries and QML imports in the desktop install tree" ON)
+set(CUEFLOW_BUILD_COMMIT "unknown" CACHE STRING "Source commit used to build CueFlow")
 include(CTest)
 
 # Keep the playback core testable without installing Qt. This is useful for
@@ -36,6 +37,8 @@ if(CUEFLOW_BUILD_APP)
         QML_FILES
             qml/Main.qml
     )
+
+    target_compile_definitions(cueflow PRIVATE CUEFLOW_BUILD_COMMIT="${CUEFLOW_BUILD_COMMIT}")
 
     target_link_libraries(cueflow PRIVATE
         Qt6::Core

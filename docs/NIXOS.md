@@ -7,12 +7,13 @@ usual FHS paths (for example, `libxkbcommon.so.0`). Do not try to fix that by
 copying random libraries into the bundle.
 
 The GitHub Actions workflow also builds a precompiled NixOS-native package and
-exports the full store closure in the `cueflow-nixos-x86_64` artifact. This lets
+exports the full store closure in a commit-specific `cueflow-nixos-x86_64-<commit SHA>` artifact. The artifact also contains `build-info.txt` with the source commit, `qml/Main.qml` SHA-256, store path, and executable SHA-256. This lets
 you run the CI build without compiling CueFlow locally. Download and extract
 that artifact, then from the extracted directory run:
 
 ```sh
 gzip -dc cueflow-nixos-x86_64.store.gz | nix-store --import
+cat build-info.txt
 out="$(cat store-path.txt)"
 "$out/bin/cueflow"
 ```
@@ -42,5 +43,8 @@ package deliberately disables the copy-based Qt deployment step and runs with
 the Qt libraries and QML imports provided by Nixpkgs.
 
 The downloadable generic Linux tarball is still not intended to be a NixOS
-native package. Use the `cueflow-nixos-x86_64` Actions artifact when you want a
-prebuilt binary without running a local build.
+native package. Use the newest `cueflow-nixos-x86_64-<commit SHA>` Actions artifact when you want a
+prebuilt binary without running a local build. Its commit-specific name prevents
+confusing an older NixOS build with a newer Android APK. When launched from a
+terminal, CueFlow prints `CueFlow build commit: ...`; compare that value with
+`source_commit` in `build-info.txt`.

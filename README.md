@@ -4,7 +4,7 @@ CueFlow is a proposed native-first successor to PrompterNG. It is a new project 
 
 ## NixOS
 
-For local development, a Nix flake provides the Qt build environment (`nix develop`, then see [`docs/NIXOS.md`](docs/NIXOS.md)). For users who do not want to build locally, the GitHub Actions workflow also exports a prebuilt Nix store closure as the `cueflow-nixos-x86_64` artifact.
+For local development, a Nix flake provides the Qt build environment (`nix develop`, then see [`docs/NIXOS.md`](docs/NIXOS.md)). For users who do not want to build locally, the GitHub Actions workflow also exports a prebuilt Nix store closure as a commit-specific `cueflow-nixos-x86_64-<commit SHA>` artifact. Each NixOS artifact includes `build-info.txt` with the exact source commit and QML checksum.
 
 ## Goals
 
