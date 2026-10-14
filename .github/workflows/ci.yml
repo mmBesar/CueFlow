@@ -574,7 +574,7 @@ jobs:
           test "$(java -version 2>&1 | head -n 1)" != ""
           printf 'JAVA_HOME=%s\n' "$JAVA_HOME"
 
-      - name: Configure and compile legacy APK
+      - name: Configure legacy Android build
         run: |
           set -euxo pipefail
           mkdir -p build-android6
@@ -582,7 +582,36 @@ jobs:
           "$QT_LEGACY_ROOT/bin/qmake" "$GITHUB_WORKSPACE/android-legacy/CueFlow.pro" \
             "CUEFLOW_BUILD_COMMIT=$GITHUB_SHA" \
             'ANDROID_ABIS=armeabi-v7a' 2>&1 | tee ../diagnostics/qt5-qmake.log
+          settings_file="$(find . -type f -name '*deployment-settings.json' -print -quit)"
+          if [[ -z "$settings_file" ]]; then
+            echo 'qmake did not generate Android deployment settings.' >&2
+            find . -maxdepth 4 -type f | sort >&2
+            exit 1
+          fi
+          printf 'Deployment settings: %s\n' "$settings_file"
+
+      - name: Build, stage, and package legacy APK
+        working-directory: build-android6
+        run: |
+          set -euxo pipefail
+          # Qt 5.15's plain `make` compiles the native library. Its documented
+          # `apk_install_target` then stages the application binary/resources
+          # under android-build before androiddeployqt is run. Skipping that
+          # staging target caused the reported missing app .so error.
           make -j2 2>&1 | tee ../diagnostics/qt5-make.log
+          make -j2 apk_install_target 2>&1 | tee ../diagnostics/qt5-stage-android-build.log
+
+          expected="$PWD/android-build/libs/armeabi-v7a/libcueflow-legacy_armeabi-v7a.so"
+          if [[ ! -f "$expected" ]]; then
+            echo "Qt staging target did not create expected application binary: $expected" >&2
+            echo 'Shared libraries found in build tree:' >&2
+            find . -type f -name '*.so' -print | sort >&2
+            echo 'Android build tree:' >&2
+            find android-build -maxdepth 5 -type f -print | sort >&2 || true
+            exit 1
+          fi
+          ls -lh "$expected"
+
           settings_file="$(find . -type f -name '*deployment-settings.json' -print -quit)"
           if [[ -z "$settings_file" ]]; then
             echo 'qmake did not generate Android deployment settings.' >&2
@@ -595,6 +624,8 @@ jobs:
             --android-platform android-31 \
             --jdk "$JAVA_HOME" \
             --gradle 2>&1 | tee ../diagnostics/qt5-androiddeployqt.log
+          echo 'APK files created by Qt 5.15:'
+          find android-build -type f -name '*.apk' -print | sort
 
       - name: Verify and stage Android 6 APK
         run: |

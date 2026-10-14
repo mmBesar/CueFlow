@@ -71,3 +71,9 @@ This pass targets the first device tests and deliberately skips the app icon as 
 - Test long text editing via touch fling and mouse wheel on both editor views.
 - Check idle CPU use with playback paused, then compare while playback is running. The source-level fix targets repeated block-format writes; it is not yet a measured CPU benchmark.
 - Install `CueFlow-android6-armv7-legacy-debug.apk` on the Android 6 phone and verify keyboard, screen-awake, scroll, network pairing, and script edits. It is a separate package to allow the modern version to coexist.
+
+
+# Legacy Android APK staging fix — 2026-10-14
+
+- Corrected the Qt 5.15.2 Android 6 CI job to run the generated `make apk` target. A plain `make` compiles the native application library but does not guarantee staging it under `android-build/libs/<abi>/`, which is where `androiddeployqt` looks for it. Qt 5.15's `apk` target stages application binaries/resources and invokes the packaging flow.
+- Kept the explicit `androiddeployqt` invocation after the staging target so the CI job can pin the Android SDK platform (`android-31`) and JDK path. The modern Qt 6 Android job and desktop/NixOS workflows are unchanged.
