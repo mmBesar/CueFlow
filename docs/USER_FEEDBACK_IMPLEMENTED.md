@@ -3,6 +3,7 @@
 This pass targets the first device tests and deliberately skips the app icon as requested.
 
 ## Implemented
+- Floating fullscreen and controls icons now draw inside a fixed 40×40 canvas centered within each button, compensating for Qt Quick Controls styles that inset `contentItem` and otherwise offset the icon toward the lower-right.
 
 - Android foreground activity receives `FLAG_KEEP_SCREEN_ON`; the flag is cleared when CueFlow backgrounds and restored when it resumes.
 - Main Material controls inherit the selected Catppuccin foreground, and reading text explicitly uses the selected flavor's text color.

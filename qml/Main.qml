@@ -523,22 +523,28 @@ ApplicationWindow {
                                 onClicked: window.visibility = window.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
                                 background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.96; border.color: window.activePalette.surface1 }
                                 contentItem: Item {
-                                    id: fullscreenGlyph
                                     implicitWidth: 40
                                     implicitHeight: 40
-                                    property color glyphColor: window.activePalette.text
-                                    property bool fullscreenMode: window.visibility === Window.FullScreen
+                                    // Qt Quick Controls styles may inset contentItem. Center a fixed-size
+                                    // glyph canvas so icon coordinates stay aligned with the button face.
+                                    Item {
+                                        id: fullscreenGlyph
+                                        width: 40
+                                        height: 40
+                                        anchors.centerIn: parent
+                                        property color glyphColor: window.activePalette.text
+                                        property bool fullscreenMode: window.visibility === Window.FullScreen
 
-                                    // Draw the icon with native QML shapes, not a font glyph or
-                                    // Canvas. These remain visible with minimal fonts and on Qt 5.
-                                    Rectangle { x: 8; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: 8; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: 30; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: 8; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: 8; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
-                                    Rectangle { x: 30; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        // Native QML shapes work without font glyphs or Canvas on Qt 5/6.
+                                        Rectangle { x: 8; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: 8; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 8; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: 30; y: 8; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: 8; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: 8; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: fullscreenGlyph.fullscreenMode ? 25 : 23; y: 30; width: fullscreenGlyph.fullscreenMode ? 7 : 9; height: 2; radius: 1; color: fullscreenGlyph.glyphColor }
+                                        Rectangle { x: 30; y: 25; width: 2; height: fullscreenGlyph.fullscreenMode ? 7 : 9; radius: 1; color: fullscreenGlyph.glyphColor }
+                                    }
                                 }
                             }
                             Button {
@@ -553,17 +559,25 @@ ApplicationWindow {
                                 }
                                 background: Rectangle { radius: 12; color: window.activePalette.mantle; opacity: 0.96; border.color: window.activePalette.surface1 }
                                 contentItem: Item {
-                                    id: controlsGlyph
                                     implicitWidth: 40
                                     implicitHeight: 40
-                                    property color glyphColor: window.activePalette.text
-                                    property color glyphAccent: window.accentColor
-                                    Rectangle { x: 9; y: 11; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
-                                    Rectangle { x: 9; y: 19; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
-                                    Rectangle { x: 9; y: 27; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
-                                    Rectangle { x: 15; y: 8; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
-                                    Rectangle { x: 23; y: 16; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
-                                    Rectangle { x: 12; y: 24; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                    // Keep the icon canvas centered even when a platform style
+                                    // applies content insets to the Button.
+                                    Item {
+                                        id: controlsGlyph
+                                        width: 40
+                                        height: 40
+                                        anchors.centerIn: parent
+                                        property color glyphColor: window.activePalette.text
+                                        property color glyphAccent: window.accentColor
+
+                                        Rectangle { x: 9; y: 11; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                        Rectangle { x: 9; y: 19; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                        Rectangle { x: 9; y: 27; width: 22; height: 2; radius: 1; color: controlsGlyph.glyphColor }
+                                        Rectangle { x: 15; y: 8; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                        Rectangle { x: 23; y: 16; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                        Rectangle { x: 12; y: 24; width: 5; height: 8; radius: 2; color: controlsGlyph.glyphAccent }
+                                    }
                                 }
                             }
                         }
