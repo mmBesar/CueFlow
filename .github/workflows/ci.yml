@@ -44,6 +44,9 @@ jobs:
       - name: Run standalone scroll tests
         run: bash ./scripts/test-scroll-model.sh
 
+      - name: Test responsive desktop controls
+        run: python3 ./scripts/test-desktop-ui.py
+
       - name: Test Linux bundle archive validation
         run: bash ./scripts/test-linux-package.sh
 
@@ -80,6 +83,9 @@ jobs:
 
       - name: Run standalone scroll tests
         run: bash ./scripts/test-scroll-model.sh
+
+      - name: Test responsive desktop controls
+        run: python3 ./scripts/test-desktop-ui.py
 
       - name: Test AppImage packaging control flow
         run: bash ./scripts/test-appimage-package.sh

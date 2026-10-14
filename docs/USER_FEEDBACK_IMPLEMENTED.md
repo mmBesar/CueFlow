@@ -85,7 +85,7 @@ This pass targets the first device tests and deliberately skips the app icon as 
 ## Implemented in source
 
 - The main editor now uses narrow phone margins and a single compact heading instead of spending two rows on title/help text. Its border belongs to the fixed ScrollView viewport rather than the content-sized TextArea, and the text has a deeper top inset so placeholder/script lines stay clear of the frame. The editor fills the remaining height. Clear, Back, and Apply labels shorten on very narrow windows.
-- Display and remote tuning sliders are collapsed behind a `Tune` action on desktop and below 760 px on small screens; each mode remembers its own expanded state. Desktop mode tabs and primary controls use compact natural-width layouts instead of filling the whole window with touch-style targets. Android retains large touch targets. The wide desktop remote view caps the connection/control column and gives the script editor most of the horizontal space. Display actions reflow into two columns on narrow phones.
+- Android and narrow-screen tuning can collapse behind a `Tune` action while keeping touch targets large. The desktop display controls use a dedicated two-panel deck: Playback and Position on the left, with Speed, Text size, and Text width grouped on the right. The panels stack on narrower desktop windows. Main desktop buttons have explicit 36px targets, wider natural widths, and persistent Play/Pause, Reset, and Remote labels so they are not clipped. The wide desktop remote view still caps the connection/control column and gives the script editor most of the horizontal space.
 - Corrected the floating glyphs' optical horizontal position by shifting the icons left independently; the button hit targets and dock positions remain unchanged. The active Enable Remote button uses Catppuccin green with contrasting text while hosting is enabled.
 - Desktop Space toggles play/pause in both display and remote mode, except while a script/address/PIN field or modal appearance dialog is active. Left/right nudges do not steal arrow keys from the remote editor/connection fields. Escape exits fullscreen rather than unexpectedly resetting playback.
 - A completed tap on the Android reading surface toggles playback only while the display is in fullscreen. Normal-mode interactions and edit fields are not bound to that gesture.
@@ -104,3 +104,12 @@ This pass targets the first device tests and deliberately skips the app icon as 
 - Left/Right now decrease/increase scrolling speed by 10 px/s per press, clamped to the UI slider's 0–600 px/s range. Remote speed changes use the existing speed command and are reflected by the host snapshot.
 - Shortcuts are disabled while editing, while the Appearance dialog is open, when host/PIN/script fields have focus, or when one of the tuning/progress sliders has focus. Space retains play/pause behavior.
 - Runtime verification still required: confirm key repeat behavior and directions with both device-role combinations, including while playback is running and near the beginning/end of the script.
+
+
+# Desktop control deck revision — 2026-10-15
+
+- Replaced the cramped desktop display-control row with two bordered groups: playback actions and position on the left, reading-adjustment sliders on the right. The control sections stack automatically below a 1020px window width.
+- Restored comfortably sized desktop buttons with an explicit minimum width and 36px height; Play/Pause, Reset, and Enable remote/Remote enabled keep complete readable labels. The remote action remains green while hosting is active.
+- Increased desktop mode-tab and form-control sizing while keeping Android sizing branches unchanged. Remote-mode action buttons now use normal desktop button heights instead of 24px controls.
+- Added a dependency-free structural QML regression check to both core CI jobs, covering balanced delimiters, unique IDs, required desktop labels/layout, and preserved Android touch sizing.
+- Local validation: the new UI structural test, ScrollModel tests, Linux package validation test, mocked AppImage packaging test, core-only CMake build, and CTest pass. The available environment lacks Qt/QML runtime tools, so the revised UI still needs a real Qt build and visual check on desktop; Android's branch should also be smoke-tested after CI.

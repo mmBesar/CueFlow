@@ -145,6 +145,8 @@ ApplicationWindow {
             }
             if (!displaySeek.pressed && !displaySpeed.pressed
                     && !displayFontSize.pressed && !displayWidth.pressed
+                    && !displaySeekDesktop.pressed && !displaySpeedDesktop.pressed
+                    && !displayFontSizeDesktop.pressed && !displayWidthDesktop.pressed
                     && !prompterFlick.moving)
                 window.overlayControlsVisible = false
             else
@@ -169,7 +171,7 @@ ApplicationWindow {
 
     header: ToolBar {
         visible: window.visibility !== Window.FullScreen
-        contentHeight: window.desktopUi ? 34 : 58
+        contentHeight: window.desktopUi ? 40 : 58
         background: Rectangle { color: window.activePalette.mantle }
         RowLayout {
             anchors.fill: parent
@@ -207,7 +209,7 @@ ApplicationWindow {
             }
             Button {
                 text: session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit")
-                implicitHeight: window.desktopUi ? 27 : 38
+                implicitHeight: window.desktopUi ? 32 : 38
                 implicitWidth: window.desktopUi ? 56 : 66
                 padding: window.desktopUi ? 4 : 6
                 ToolTip.visible: hovered
@@ -266,7 +268,7 @@ ApplicationWindow {
             Button {
                 text: "⚙"
                 implicitWidth: window.desktopUi ? 34 : 40
-                implicitHeight: window.desktopUi ? 27 : 38
+                implicitHeight: window.desktopUi ? 32 : 38
                 padding: 0
                 ToolTip.visible: hovered
                 ToolTip.text: "Appearance"
@@ -295,14 +297,14 @@ ApplicationWindow {
             Layout.leftMargin: window.desktopUi ? 12 : 0
             Layout.topMargin: window.desktopUi ? 4 : 0
             Layout.bottomMargin: window.desktopUi ? 4 : 0
-            Layout.preferredHeight: window.desktopUi ? 24 : 48
-            Layout.minimumHeight: window.desktopUi ? 24 : 48
-            implicitHeight: window.desktopUi ? 24 : 48
+            Layout.preferredHeight: window.desktopUi ? 30 : 48
+            Layout.minimumHeight: window.desktopUi ? 30 : 48
+            implicitHeight: window.desktopUi ? 30 : 48
             currentIndex: session.remoteMode ? 1 : 0
             onCurrentIndexChanged: session.setMode(currentIndex === 1 ? "remote" : "display")
             background: Rectangle { color: window.activePalette.mantle }
-            TabButton { text: "Display"; implicitHeight: window.desktopUi ? 24 : 48; Layout.minimumHeight: window.desktopUi ? 24 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 11 : 14 }
-            TabButton { text: "Remote"; implicitHeight: window.desktopUi ? 24 : 48; Layout.minimumHeight: window.desktopUi ? 24 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 11 : 14 }
+            TabButton { text: "Display"; implicitHeight: window.desktopUi ? 30 : 48; Layout.minimumHeight: window.desktopUi ? 30 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 12 : 14 }
+            TabButton { text: "Remote"; implicitHeight: window.desktopUi ? 30 : 48; Layout.minimumHeight: window.desktopUi ? 30 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 12 : 14 }
         }
 
         // DISPLAY MODE ------------------------------------------------------
@@ -684,7 +686,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: window.desktopUi ? 4 : 6
                                 Button {
-                                    implicitHeight: window.desktopUi ? 24 : 46
+                                    implicitHeight: window.desktopUi ? 34 : 46
                                     padding: window.desktopUi ? 4 : 8
                                     font.pixelSize: window.desktopUi ? 12 : 14
                                     text: "Clear"
@@ -700,14 +702,14 @@ ApplicationWindow {
                                     Layout.minimumWidth: 0
                                 }
                                 Button {
-                                    implicitHeight: window.desktopUi ? 24 : 46
+                                    implicitHeight: window.desktopUi ? 34 : 46
                                     padding: window.desktopUi ? 4 : 8
                                     font.pixelSize: window.desktopUi ? 12 : 14
                                     text: window.width < 420 ? "Back" : "Back to reading"
                                     onClicked: { window.editingScript = false; window.revealControls() }
                                 }
                                 Button {
-                                    implicitHeight: window.desktopUi ? 24 : 46
+                                    implicitHeight: window.desktopUi ? 34 : 46
                                     padding: window.desktopUi ? 4 : 8
                                     font.pixelSize: window.desktopUi ? 12 : 14
                                     text: window.width < 420 ? "Apply" : "Apply script"
@@ -729,8 +731,338 @@ ApplicationWindow {
                     color: window.activePalette.surface1
                     visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
                 }
+                // Desktop-only control deck: actions/progress on the left,
+                // reading adjustments on the right. Android keeps the touch layout below.
+                GridLayout {
+                    id: desktopDisplayControls
+                    visible: window.desktopUi && !window.editingScript
+                             && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    Layout.topMargin: 8
+                    Layout.bottomMargin: 8
+                    columns: window.width >= 1020 ? 2 : 1
+                    columnSpacing: 12
+                    rowSpacing: 8
+
+                    Rectangle {
+                        id: desktopPlaybackPanel
+                        Layout.row: 0
+                        Layout.column: 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: 330
+                        Layout.preferredWidth: window.width >= 1020 ? Math.min(460, window.width * 0.40) : -1
+                        implicitHeight: desktopPlaybackContent.implicitHeight + 20
+                        radius: 10
+                        color: window.activePalette.mantle
+                        border.color: window.activePalette.surface1
+
+                        ColumnLayout {
+                            id: desktopPlaybackContent
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 7
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    text: "PLAYBACK"
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.1
+                                }
+                                Item { Layout.fillWidth: true }
+                                Rectangle {
+                                    radius: 10
+                                    color: session.playing ? window.activePalette.green : window.activePalette.surface0
+                                    implicitWidth: playbackStateLabel.implicitWidth + 14
+                                    implicitHeight: 22
+                                    Label {
+                                        id: playbackStateLabel
+                                        anchors.centerIn: parent
+                                        text: session.playing ? "PLAYING" : "PAUSED"
+                                        color: session.playing ? window.contrastingText(window.activePalette.green) : window.activePalette.subtext1
+                                        font.pixelSize: 10
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Button {
+                                    id: displayPlayPauseDesktop
+                                    Layout.preferredWidth: 96
+                                    Layout.minimumWidth: 88
+                                    implicitHeight: 36
+                                    padding: 8
+                                    font.pixelSize: 13
+                                    text: session.playing ? "Pause" : "Play"
+                                    highlighted: true
+                                    onClicked: session.togglePlayback()
+                                }
+                                Button {
+                                    id: displayResetDesktop
+                                    Layout.preferredWidth: 82
+                                    Layout.minimumWidth: 76
+                                    implicitHeight: 36
+                                    padding: 8
+                                    font.pixelSize: 13
+                                    text: "Reset"
+                                    onClicked: session.resetPlayback()
+                                }
+                                Button {
+                                    id: remoteToggleDesktop
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 132
+                                    Layout.preferredWidth: 152
+                                    implicitHeight: 36
+                                    padding: 8
+                                    font.pixelSize: 12
+                                    text: session.hosting ? "Remote enabled" : "Enable remote"
+                                    ToolTip.text: session.hosting ? "Remote control is active — click to stop it" : "Enable remote control from another device"
+                                    highlighted: session.hosting
+                                    background: Rectangle {
+                                        radius: 8
+                                        color: session.hosting ? window.activePalette.green : window.activePalette.surface0
+                                        border.color: session.hosting ? window.activePalette.green : window.activePalette.surface1
+                                    }
+                                    contentItem: Text {
+                                        text: remoteToggleDesktop.text
+                                        color: session.hosting ? window.contrastingText(window.activePalette.green) : window.activePalette.text
+                                        font: remoteToggleDesktop.font
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideNone
+                                        wrapMode: Text.NoWrap
+                                    }
+                                    onClicked: session.hosting ? session.stopHosting() : session.startHosting()
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    text: "Position"
+                                    color: window.activePalette.subtext1
+                                    font.pixelSize: 12
+                                }
+                                Slider {
+                                    id: displaySeekDesktop
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 28
+                                    Layout.minimumHeight: 26
+                                    from: 0; to: 1; stepSize: 0.0001
+                                    Binding { target: displaySeekDesktop; property: "value"; value: session.progress; when: !displaySeekDesktop.pressed }
+                                    onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
+                                    onMoved: session.seekTo(value)
+                                    WheelHandler {
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: function(event) {
+                                            const direction = window.wheelDirection(event)
+                                            if (direction !== 0) {
+                                                session.beginSeek()
+                                                session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)))
+                                                session.endSeek()
+                                                event.accepted = true
+                                            }
+                                        }
+                                    }
+                                }
+                                Label {
+                                    text: Math.round(session.progress * 1000) / 10 + "%"
+                                    color: window.activePalette.subtext1
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: desktopTuningPanel
+                        Layout.row: window.width >= 1020 ? 0 : 1
+                        Layout.column: window.width >= 1020 ? 1 : 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: 0
+                        implicitHeight: desktopTuningContent.implicitHeight + 20
+                        radius: 10
+                        color: window.activePalette.mantle
+                        border.color: window.activePalette.surface1
+
+                        ColumnLayout {
+                            id: desktopTuningContent
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 7
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label {
+                                    text: "READING ADJUSTMENTS"
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: 1.1
+                                }
+                                Item { Layout.fillWidth: true }
+                                Label {
+                                    visible: window.width >= 1120
+                                    text: "↑ ↓ scroll  ·  ← → speed"
+                                    color: window.activePalette.overlay1
+                                    font.pixelSize: 10
+                                }
+                            }
+
+                            GridLayout {
+                                id: desktopTuningGrid
+                                Layout.fillWidth: true
+                                columns: desktopTuningPanel.width >= 600 ? 3 : (desktopTuningPanel.width >= 420 ? 2 : 1)
+                                columnSpacing: 14
+                                rowSpacing: 7
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: "Speed"; color: window.activePalette.text; font.pixelSize: 12 }
+                                        Item { Layout.fillWidth: true }
+                                        Label { text: Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                    }
+                                    Slider {
+                                        id: displaySpeedDesktop
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 25
+                                        Layout.minimumHeight: 24
+                                        from: 0; to: 600; stepSize: 1
+                                        Binding { target: displaySpeedDesktop; property: "value"; value: session.speed; when: !displaySpeedDesktop.pressed }
+                                        onMoved: session.setSpeed(value)
+                                        WheelHandler {
+                                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                            onWheel: function(event) {
+                                                const direction = window.wheelDirection(event)
+                                                if (direction !== 0) {
+                                                    session.setSpeed(Math.max(0, Math.min(600, session.speed + direction * 10)))
+                                                    event.accepted = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: "Text size"; color: window.activePalette.text; font.pixelSize: 12 }
+                                        Item { Layout.fillWidth: true }
+                                        Label { text: session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                    }
+                                    Slider {
+                                        id: displayFontSizeDesktop
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 25
+                                        Layout.minimumHeight: 24
+                                        from: 12; to: 100; stepSize: 1
+                                        Binding { target: displayFontSizeDesktop; property: "value"; value: session.fontSize; when: !displayFontSizeDesktop.pressed }
+                                        onMoved: session.setFontSize(value)
+                                        WheelHandler {
+                                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                            onWheel: function(event) {
+                                                const direction = window.wheelDirection(event)
+                                                if (direction !== 0) {
+                                                    session.setFontSize(Math.max(12, Math.min(100, session.fontSize + direction)))
+                                                    event.accepted = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: "Text width"; color: window.activePalette.text; font.pixelSize: 12 }
+                                        Item { Layout.fillWidth: true }
+                                        Label { text: session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                    }
+                                    Slider {
+                                        id: displayWidthDesktop
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 25
+                                        Layout.minimumHeight: 24
+                                        from: 35; to: 100; stepSize: 1
+                                        Binding { target: displayWidthDesktop; property: "value"; value: session.textWidth; when: !displayWidthDesktop.pressed }
+                                        onMoved: session.setTextWidth(value)
+                                        WheelHandler {
+                                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                            onWheel: function(event) {
+                                                const direction = window.wheelDirection(event)
+                                                if (direction !== 0) {
+                                                    session.setTextWidth(Math.max(35, Math.min(100, session.textWidth + direction)))
+                                                    event.accepted = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: desktopSessionInfo
+                        Layout.row: window.width >= 1020 ? 1 : 2
+                        Layout.column: 0
+                        Layout.columnSpan: desktopDisplayControls.columns
+                        Layout.fillWidth: true
+                        visible: session.hosting || session.status.length > 0
+                        radius: 8
+                        color: window.activePalette.mantle
+                        border.color: window.activePalette.surface1
+                        implicitHeight: desktopSessionContent.implicitHeight + 14
+
+                        RowLayout {
+                            id: desktopSessionContent
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 12
+                            ColumnLayout {
+                                visible: session.hosting
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Label { text: "Pair another device"; font.bold: true; font.pixelSize: 12; color: window.activePalette.text }
+                                Label { text: "Address: " + session.localAddresses.join("  ·  "); wrapMode: Text.Wrap; font.pixelSize: 11; color: window.activePalette.subtext1; Layout.fillWidth: true }
+                                Label { text: "Port: " + session.port + "     PIN: " + session.pin; font.pixelSize: 11; color: window.activePalette.subtext1 }
+                            }
+                            Item { visible: session.hosting; Layout.fillWidth: true }
+                            Label {
+                                text: session.status
+                                color: window.activePalette.subtext0
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                                Layout.maximumWidth: session.hosting ? 360 : 1000
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+                    }
+                }
+
                 ColumnLayout {
-                    visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                    visible: !window.desktopUi && !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
                     Layout.fillWidth: true
                     Layout.leftMargin: window.desktopUi ? 8 : 10
                     Layout.rightMargin: window.desktopUi ? 8 : 10
@@ -746,9 +1078,9 @@ ApplicationWindow {
                         Button {
                             Layout.fillWidth: !window.desktopUi
                             Layout.preferredWidth: window.desktopUi ? 58 : -1
-                            implicitHeight: window.desktopUi ? 24 : 46
+                            implicitHeight: window.desktopUi ? 34 : 46
                             padding: window.desktopUi ? 3 : 8
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             text: session.playing ? "Pause" : "Play"
                             highlighted: true
                             onClicked: session.togglePlayback()
@@ -756,9 +1088,9 @@ ApplicationWindow {
                         Button {
                             Layout.fillWidth: !window.desktopUi
                             Layout.preferredWidth: window.desktopUi ? 54 : -1
-                            implicitHeight: window.desktopUi ? 24 : 46
+                            implicitHeight: window.desktopUi ? 34 : 46
                             padding: window.desktopUi ? 3 : 8
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             text: "Reset"
                             onClicked: session.resetPlayback()
                         }
@@ -766,9 +1098,9 @@ ApplicationWindow {
                             id: remoteToggleButton
                             Layout.fillWidth: !window.desktopUi
                             Layout.preferredWidth: window.desktopUi ? 112 : -1
-                            implicitHeight: window.desktopUi ? 24 : 46
+                            implicitHeight: window.desktopUi ? 34 : 46
                             padding: window.desktopUi ? 3 : 8
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             text: session.hosting ? "Remote enabled" : (window.width < 760 ? "Remote" : "Enable remote")
                             ToolTip.text: session.hosting ? "Remote control is active — click to stop it" : "Enable remote control from another device"
                             highlighted: session.hosting
@@ -792,9 +1124,9 @@ ApplicationWindow {
                             visible: window.width < 760 || window.desktopUi
                             Layout.fillWidth: !window.desktopUi
                             Layout.preferredWidth: window.desktopUi ? 48 : -1
-                            implicitHeight: window.desktopUi ? 24 : 46
+                            implicitHeight: window.desktopUi ? 34 : 46
                             padding: window.desktopUi ? 3 : 8
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             text: window.displayTuningExpanded ? "Hide tuning" : "Tune"
                             onClicked: window.displayTuningExpanded = !window.displayTuningExpanded
                         }
@@ -806,8 +1138,8 @@ ApplicationWindow {
                         Slider {
                             id: displaySeek
                             Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                             from: 0; to: 1; stepSize: 0.0001
                             Binding { target: displaySeek; property: "value"; value: session.progress; when: !displaySeek.pressed }
                             onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
@@ -829,7 +1161,7 @@ ApplicationWindow {
                             visible: window.width >= 500
                             text: Math.round(session.progress * 1000) / 10 + "%"
                             color: window.activePalette.subtext1
-                            font.pixelSize: window.desktopUi ? 10 : 12
+                            font.pixelSize: window.desktopUi ? 11 : 12
                         }
                     }
                     GridLayout {
@@ -843,12 +1175,12 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
-                            Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 10 : 12 }
+                            Label { text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 12 }
                             Slider {
                                 id: displaySpeed
                                 Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                                 from: 0; to: 600; stepSize: 1
                                 Binding { target: displaySpeed; property: "value"; value: session.speed; when: !displaySpeed.pressed }
                                 onMoved: session.setSpeed(value)
@@ -867,12 +1199,12 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
-                            Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 10 : 12 }
+                            Label { text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 12 }
                             Slider {
                                 id: displayFontSize
                                 Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                                 from: 12; to: 100; stepSize: 1
                                 Binding { target: displayFontSize; property: "value"; value: session.fontSize; when: !displayFontSize.pressed }
                                 onMoved: session.setFontSize(value)
@@ -891,12 +1223,12 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
-                            Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 10 : 12 }
+                            Label { text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 12 }
                             Slider {
                                 id: displayWidth
                                 Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                                 from: 35; to: 100; stepSize: 1
                                 Binding { target: displayWidth; property: "value"; value: session.textWidth; when: !displayWidth.pressed }
                                 onMoved: session.setTextWidth(value)
@@ -976,7 +1308,7 @@ ApplicationWindow {
                     text: "Connect directly to the device showing your script. No cloud account or separate server."
                     color: window.activePalette.subtext1
                     wrapMode: Text.Wrap
-                    font.pixelSize: window.desktopUi ? 11 : 14
+                    font.pixelSize: window.desktopUi ? 12 : 14
                     Layout.fillWidth: true
                     Layout.row: 1
                     Layout.column: 0
@@ -993,7 +1325,7 @@ ApplicationWindow {
                     TextField {
                         id: hostField
                         Layout.fillWidth: true
-                        implicitHeight: window.desktopUi ? 25 : 48
+                        implicitHeight: window.desktopUi ? 32 : 48
                         font.pixelSize: window.desktopUi ? 12 : 14
                         placeholderText: "Display device LAN address (e.g. 192.168.1.25)"
                         text: session.hostAddress
@@ -1005,15 +1337,15 @@ ApplicationWindow {
                             id: pinField
                             Layout.fillWidth: true
                             Layout.maximumWidth: 220
-                            implicitHeight: window.desktopUi ? 25 : 48
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            implicitHeight: window.desktopUi ? 32 : 48
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             placeholderText: "4-digit PIN"
                             maximumLength: 4
                             inputMethodHints: Qt.ImhDigitsOnly
                         }
                         Button {
                             text: "Connect"
-                            implicitHeight: window.desktopUi ? 25 : 48
+                            implicitHeight: window.desktopUi ? 32 : 48
                             padding: window.desktopUi ? 6 : 8
                             font.pixelSize: window.desktopUi ? 12 : 14
                             highlighted: true
@@ -1044,7 +1376,7 @@ ApplicationWindow {
                             Button {
                                 Layout.fillWidth: true
                                 text: window.width < 500 ? "−20" : "− 20 px"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 onClicked: session.nudgePixels(-20)
@@ -1053,7 +1385,7 @@ ApplicationWindow {
                             Button {
                                 Layout.fillWidth: true
                                 text: session.playing ? "Pause" : "Play"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 highlighted: true
@@ -1062,7 +1394,7 @@ ApplicationWindow {
                             Button {
                                 Layout.fillWidth: true
                                 text: window.width < 500 ? "+20" : "+ 20 px"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 onClicked: session.nudgePixels(20)
@@ -1078,7 +1410,7 @@ ApplicationWindow {
                                       ? (session.viewerFullscreen ? "Exit fullscreen" : "Fullscreen")
                                       : (session.viewerFullscreen ? "Exit display fullscreen" : "Fullscreen display")
                                 font.pixelSize: window.desktopUi ? 11 : (window.width < 500 ? 11 : 12)
-                                implicitHeight: window.desktopUi ? 24 : 44
+                                implicitHeight: window.desktopUi ? 32 : 44
                                 padding: window.desktopUi ? 4 : 8
                                 ToolTip.text: "Toggle fullscreen on the display device"
                                 onClicked: session.requestViewerFullscreenToggle()
@@ -1089,18 +1421,18 @@ ApplicationWindow {
                                       ? (session.viewerControlsVisible ? "Hide controls" : "Show controls")
                                       : (session.viewerControlsVisible ? "Hide display controls" : "Show display controls")
                                 font.pixelSize: window.desktopUi ? 11 : (window.width < 500 ? 11 : 12)
-                                implicitHeight: window.desktopUi ? 24 : 44
+                                implicitHeight: window.desktopUi ? 32 : 44
                                 padding: window.desktopUi ? 4 : 8
                                 ToolTip.text: "Show or hide the display controls"
                                 onClicked: session.requestViewerControlsToggle()
                             }
                         }
-                        Label { text: "Position · " + Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 14 }
+                        Label { text: "Position · " + Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 12 : 14 }
                         Slider {
                             id: remoteSeek
                             Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                             from: 0; to: 1; stepSize: 0.0001
                             Binding { target: remoteSeek; property: "value"; value: session.progress; when: !remoteSeek.pressed }
                             onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
@@ -1124,7 +1456,7 @@ ApplicationWindow {
                             Button {
                                 Layout.fillWidth: true
                                 text: window.remoteTuningExpanded ? "Hide tuning" : "Tune"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 onClicked: window.remoteTuningExpanded = !window.remoteTuningExpanded
@@ -1133,19 +1465,19 @@ ApplicationWindow {
                                 visible: !window.desktopUi
                                 Layout.fillWidth: true
                                 text: "Reset to beginning"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 onClicked: session.resetPlayback()
                             }
                         }
-                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 14 }
+                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Speed · " + Math.round(session.speed) + " px/s"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 12 : 14 }
                         Slider {
                             id: remoteSpeed
                             visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded)
                             Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                             from: 0; to: 600; stepSize: 1
                             Binding { target: remoteSpeed; property: "value"; value: session.speed; when: !remoteSpeed.pressed }
                             onMoved: session.setSpeed(value)
@@ -1160,13 +1492,13 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 14 }
+                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Font · " + session.fontSize + " pt"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 12 : 14 }
                         Slider {
                             id: remoteFontSize
                             visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded)
                             Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                             from: 12; to: 100; stepSize: 1
                             Binding { target: remoteFontSize; property: "value"; value: session.fontSize; when: !remoteFontSize.pressed }
                             onMoved: session.setFontSize(value)
@@ -1181,13 +1513,13 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 11 : 14 }
+                        Label { visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded); text: "Text width · " + session.textWidth + "%"; color: window.activePalette.subtext1; font.pixelSize: window.desktopUi ? 12 : 14 }
                         Slider {
                             id: remoteWidth
                             visible: window.desktopUi ? window.remoteTuningExpanded : (window.width >= 760 || window.remoteTuningExpanded)
                             Layout.fillWidth: true
-                            Layout.preferredHeight: window.desktopUi ? 14 : 40
-                            Layout.minimumHeight: window.desktopUi ? 14 : 32
+                            Layout.preferredHeight: window.desktopUi ? 20 : 40
+                            Layout.minimumHeight: window.desktopUi ? 20 : 32
                             from: 35; to: 100; stepSize: 1
                             Binding { target: remoteWidth; property: "value"; value: session.textWidth; when: !remoteWidth.pressed }
                             onMoved: session.setTextWidth(value)
@@ -1205,9 +1537,9 @@ ApplicationWindow {
                         Button {
                             visible: window.width >= 760
                             text: "Reset"
-                            implicitHeight: window.desktopUi ? 24 : 46
+                            implicitHeight: window.desktopUi ? 34 : 46
                             padding: window.desktopUi ? 4 : 8
-                            font.pixelSize: window.desktopUi ? 11 : 14
+                            font.pixelSize: window.desktopUi ? 12 : 14
                             onClicked: session.resetPlayback()
                         }
                     }
@@ -1285,7 +1617,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Button {
                                 text: "Clear"
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 onClicked: {
@@ -1297,7 +1629,7 @@ ApplicationWindow {
                             Button {
                                 text: "Send script to display"
                                 enabled: session.connected
-                                implicitHeight: window.desktopUi ? 24 : 46
+                                implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 highlighted: true
@@ -1313,7 +1645,7 @@ ApplicationWindow {
                     Layout.column: 0
                     Layout.columnSpan: remoteContent.wideDesktop ? 2 : 1
                     Label { text: session.status; color: window.activePalette.subtext0; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                    Button { text: "Disconnect"; enabled: session.connected; implicitHeight: window.desktopUi ? 24 : 46; padding: window.desktopUi ? 4 : 8; font.pixelSize: window.desktopUi ? 12 : 14; onClicked: session.disconnectSession() }
+                    Button { text: "Disconnect"; enabled: session.connected; implicitHeight: window.desktopUi ? 34 : 46; padding: window.desktopUi ? 4 : 8; font.pixelSize: window.desktopUi ? 12 : 14; onClicked: session.disconnectSession() }
                 }
             }
         }
@@ -1428,6 +1760,12 @@ ApplicationWindow {
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus
                  && !pinField.activeFocus
+                 && !displaySeek.activeFocus && !displaySpeed.activeFocus
+                 && !displayFontSize.activeFocus && !displayWidth.activeFocus
+                 && !displaySeekDesktop.activeFocus && !displaySpeedDesktop.activeFocus
+                 && !displayFontSizeDesktop.activeFocus && !displayWidthDesktop.activeFocus
+                 && !remoteSeek.activeFocus && !remoteSpeed.activeFocus
+                 && !remoteFontSize.activeFocus && !remoteWidth.activeFocus
         onActivated: session.togglePlayback()
     }
     Shortcut {
@@ -1458,6 +1796,10 @@ ApplicationWindow {
                  && !displaySpeed.activeFocus
                  && !displayFontSize.activeFocus
                  && !displayWidth.activeFocus
+                 && !displaySeekDesktop.activeFocus
+                 && !displaySpeedDesktop.activeFocus
+                 && !displayFontSizeDesktop.activeFocus
+                 && !displayWidthDesktop.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -1476,6 +1818,10 @@ ApplicationWindow {
                  && !displaySpeed.activeFocus
                  && !displayFontSize.activeFocus
                  && !displayWidth.activeFocus
+                 && !displaySeekDesktop.activeFocus
+                 && !displaySpeedDesktop.activeFocus
+                 && !displayFontSizeDesktop.activeFocus
+                 && !displayWidthDesktop.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -1494,6 +1840,10 @@ ApplicationWindow {
                  && !displaySpeed.activeFocus
                  && !displayFontSize.activeFocus
                  && !displayWidth.activeFocus
+                 && !displaySeekDesktop.activeFocus
+                 && !displaySpeedDesktop.activeFocus
+                 && !displayFontSizeDesktop.activeFocus
+                 && !displayWidthDesktop.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -1512,6 +1862,10 @@ ApplicationWindow {
                  && !displaySpeed.activeFocus
                  && !displayFontSize.activeFocus
                  && !displayWidth.activeFocus
+                 && !displaySeekDesktop.activeFocus
+                 && !displaySpeedDesktop.activeFocus
+                 && !displayFontSizeDesktop.activeFocus
+                 && !displayWidthDesktop.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
