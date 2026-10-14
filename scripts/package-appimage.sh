@@ -116,13 +116,12 @@ if [[ -n "${QT_ROOT_DIR:-}" ]]; then
 fi
 
 # The install tree already contains Qt's CMake-generated deployment of Qt/QML.
-# linuxdeploy adds missing ELF dependencies and the Qt plugin completes QML/plugin
-# collection. Keep EGL/GL/DRM/GBM and Wayland client libraries from the host: they
-# are part of the system's graphics-driver/window-system stack and bundling them can
-# both fail on clean builders and break runtime driver compatibility. The system
-# supplies these libraries on graphical Linux desktops (AppImage upstream excludes
-# the same classes of driver libraries for this reason).
-# The generated AppRun above remains the entry point.
+# The pinned linuxdeploy-qt plugin runs its own ELF dependency scan; exclusions
+# passed to linuxdeploy are not reliably propagated into that plugin (upstream
+# issue: linuxdeploy/linuxdeploy-plugin-qt#205). Install the host runtime libraries
+# in the AppImage job so the scan can resolve them, then explicitly remove these
+# driver/window-system libraries from AppDir below. Keep this cleanup even with the
+# main linuxdeploy exclusions: it is a postcondition, not an option-dependent hope.
 log "Deploying Qt/QML and ELF dependencies for $architecture"
 # Pass the original staged executable so linuxdeploy can enumerate its ELF
 # dependencies. Remove the copied target first to avoid a same-file copy.
@@ -131,15 +130,46 @@ rm -f "$appdir/usr/bin/cueflow"
     --executable "$stage_dir/bin/cueflow" \
     --desktop-file "$repo_root/packaging/linux/cueflow.desktop" \
     --icon-file "$repo_root/packaging/linux/cueflow.svg" \
-    --exclude-library 'libEGL.so*' \
+    --exclude-library 'libEGL*.so*' \
     --exclude-library 'libGL.so*' \
-    --exclude-library 'libGLX.so*' \
+    --exclude-library 'libGLX*.so*' \
     --exclude-library 'libGLdispatch.so*' \
     --exclude-library 'libOpenGL.so*' \
     --exclude-library 'libgbm.so*' \
     --exclude-library 'libdrm.so*' \
     --exclude-library 'libwayland-*.so*' \
+    --exclude-library 'libxcb-glx.so*' \
+    --exclude-library 'libglapi.so*' \
+    --exclude-library 'libgallium-*.so*' \
     --plugin qt
+
+# The Qt plugin can copy driver-sensitive host libraries despite the exclusions
+# above. They must be resolved on the target system so the EGL/GL loader matches
+# the active Mesa/proprietary driver and window-system stack. Remove files and
+# symlinks anywhere in the AppDir, then assert that none remain.
+log "Removing host graphics/window-system libraries from AppDir"
+removed_graphics_libs=0
+while IFS= read -r -d '' library_path; do
+    library_name="${library_path##*/}"
+    case "$library_name" in
+        libEGL*.so*|libGL.so*|libGLX*.so*|libGLdispatch.so*|libOpenGL.so*|\
+        libgbm.so*|libdrm.so*|libwayland-*.so*|libxcb-glx.so*|libglapi.so*|libgallium-*.so*)
+            rm -f -- "$library_path"
+            removed_graphics_libs=$((removed_graphics_libs + 1))
+            log "Left to host: $library_name"
+            ;;
+    esac
+done < <(find "$appdir/usr" \( -type f -o -type l \) -print0)
+
+while IFS= read -r -d '' library_path; do
+    library_name="${library_path##*/}"
+    case "$library_name" in
+        libEGL*.so*|libGL.so*|libGLX*.so*|libGLdispatch.so*|libOpenGL.so*|\
+        libgbm.so*|libdrm.so*|libwayland-*.so*|libxcb-glx.so*|libglapi.so*|libgallium-*.so*)
+            die "Host graphics library leaked into AppDir: $library_path" ;;
+    esac
+done < <(find "$appdir/usr" \( -type f -o -type l \) -print0)
+log "Removed $removed_graphics_libs host graphics/window-system library files"
 
 # linuxdeploy may create its own AppRun wrapper. Reassert our known entry point
 # after deployment so the final image always launches the bundled executable.

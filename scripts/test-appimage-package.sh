@@ -65,8 +65,8 @@ while (( $# )); do
         --icon-file) icon="$2"; shift 2 ;;
         --exclude-library)
             case "$2" in
-                'libEGL.so*') excluded_egl=yes ;;
-                'libGL.so*'|'libGLX.so*'|'libGLdispatch.so*'|'libOpenGL.so*'|'libgbm.so*'|'libdrm.so*'|'libwayland-*.so*') ;;
+                'libEGL*.so*') excluded_egl=yes ;;
+                'libGL.so*'|'libGLX*.so*'|'libGLdispatch.so*'|'libOpenGL.so*'|'libgbm.so*'|'libdrm.so*'|'libwayland-*.so*'|'libxcb-glx.so*'|'libglapi.so*'|'libgallium-*.so*') ;;
                 *) echo "unexpected fake exclude pattern: $2" >&2; exit 2 ;;
             esac
             exclude_count=$((exclude_count + 1))
@@ -76,11 +76,15 @@ while (( $# )); do
     esac
 done
 test "$excluded_egl" = yes || { echo 'libEGL was not excluded from AppDir dependency deployment' >&2; exit 3; }
-test "$exclude_count" -eq 8 || { echo "expected eight graphics-stack exclusions, got $exclude_count" >&2; exit 3; }
+test "$exclude_count" -eq 11 || { echo "expected eleven graphics-stack exclusions, got $exclude_count" >&2; exit 3; }
 test -x "$executable"
 test -x "$appdir/AppRun"
 test -x "$(dirname -- "$0")/linuxdeploy-plugin-qt-$(uname -m).AppImage"
-mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/scalable/apps"
+mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/scalable/apps"
+# Simulate the real Qt plugin copying graphics dependencies despite linuxdeploy's exclusions.
+for library in libEGL.so.1 libEGL_mesa.so.0 libGL.so.1 libGLX.so.0 libGLX_mesa.so.0 libGLdispatch.so.0 libOpenGL.so.0 libgbm.so.1 libdrm.so.2 libwayland-client.so.0 libxcb-glx.so.0 libglapi.so.0 libgallium-24.0.0.so; do
+    printf 'mock host graphics library\n' > "$appdir/usr/lib/$library"
+done
 cp "$executable" "$appdir/usr/bin/cueflow"
 cp "$desktop" "$appdir/cueflow.desktop"
 cp "$desktop" "$appdir/usr/share/applications/cueflow.desktop"
@@ -102,6 +106,17 @@ test -f "$appdir/cueflow.desktop"
 test -f "$appdir/cueflow.svg"
 test -x "$appdir/usr/bin/cueflow"
 test -f "$appdir/usr/BUILD-INFO.txt"
+# The packaging script must scrub any host driver/window-system libraries copied by Qt.
+leaked=no
+while IFS= read -r -d '' candidate; do
+    case "${candidate##*/}" in
+        libEGL*.so*|libGL.so*|libGLX*.so*|libGLdispatch.so*|libOpenGL.so*|libgbm.so*|libdrm.so*|libwayland-*.so*|libxcb-glx.so*|libglapi.so*|libgallium-*.so*)
+            echo "host graphics library leaked into AppDir: $candidate" >&2
+            leaked=yes
+            ;;
+    esac
+done < <(find "$appdir/usr" \( -type f -o -type l \) -print0)
+test "$leaked" = no
 test -x "${APPIMAGETOOL_RUNTIME_FILE:?runtime must be explicitly pinned}"
 cp /bin/true "$out"
 TOOL

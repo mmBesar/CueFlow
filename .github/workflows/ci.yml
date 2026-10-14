@@ -348,6 +348,15 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Install host graphics libraries for dependency scanning
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libegl1 libgl1 libglx0 libglvnd0 libopengl0 \
+            libgbm1 libdrm2 libwayland-client0 libwayland-egl1 \
+            libwayland-cursor0 libwayland-server0 libxcb-glx0
+
       - name: Set up Python for Qt installer
         uses: actions/setup-python@v7
         with:
@@ -403,6 +412,15 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+
+      - name: Install host graphics libraries for dependency scanning
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libegl1 libgl1 libglx0 libglvnd0 libopengl0 \
+            libgbm1 libdrm2 libwayland-client0 libwayland-egl1 \
+            libwayland-cursor0 libwayland-server0 libxcb-glx0
 
       - name: Set up Python for Qt installer
         uses: actions/setup-python@v7
