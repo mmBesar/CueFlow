@@ -1,7 +1,5 @@
 # CueFlow release process
 
-The initial public release is version **0.1.0**. The repository contains a version-specific note at [`docs/releases/v0.1.0.md`](releases/v0.1.0.md); the tag workflow attaches that note to the draft GitHub Release.
-
 CueFlow development CI artifacts are short-lived test builds. User-facing releases are created from version tags (`vMAJOR.MINOR.PATCH`) and appear as **draft GitHub Releases** so the assets can be reviewed and tested before publication.
 
 ## Platforms currently packaged
@@ -32,14 +30,14 @@ keytool -genkeypair -v \
 base64 -w0 cueflow-release.jks > cueflow-release.jks.base64
 ```
 
-Copy the base64 file's contents into the first secret. Do not put the keystore or passwords in repository files, issue comments, or workflow logs. The same key is used to sign both package IDs so future APK updates have a consistent signer. Losing the key may prevent users from installing signed updates over the existing release. **The first release cannot update an already-installed debug-signed Actions APK in place**: back up any script text first, uninstall the test APK, then install the signed release; uninstalling removes CueFlow's private local settings.
+Copy the base64 file's contents into the first secret. Do not put the keystore or passwords in repository files, issue comments, or workflow logs. The same key is used to sign both package IDs so future APK updates have a consistent signer. Losing the key may prevent users from installing signed updates over the existing release.
 
 ## Publishing a release
 
 1. Update the project version in `CMakeLists.txt` and `flake.nix` together, and update user-facing release notes.
 2. Confirm branch CI is green, particularly both Android jobs. Test the modern APK on a current phone and the legacy APK on a real Android 6-era device; CI compilation alone is not device acceptance.
 3. Ensure all four Android signing secrets above are configured.
-4. Commit the version change and release note, confirm the final commit is the one you intend to publish, then create and push the matching tag: `git tag -a v0.1.0 -m 'CueFlow 0.1.0' && git push origin v0.1.0`. The workflow creates a draft; it does not publish the release automatically.
-5. The workflow builds all current targets, packages AppImages for x86_64 and aarch64, signs and verifies the release APKs, generates SHA-256 checksums, attaches version-specific release notes, and creates a **draft** GitHub Release. Inspect its assets and release notes, test the AppImages on both architectures (and preferably an older glibc-based distribution), test the tarball installers, test the APKs on real devices, then publish the draft manually.
+4. Commit the version change, then create and push a matching tag, for example `git tag -a v0.1.0 -m 'CueFlow 0.1.0' && git push origin v0.1.0`.
+5. The workflow builds all current targets, packages AppImages for x86_64 and aarch64, signs and verifies the release APKs, generates SHA-256 checksums, and creates a **draft** GitHub Release. Inspect its assets and release notes, test the AppImages on both architectures (and preferably an older glibc-based distribution), test the tarball installers, test the APKs on real devices, then publish the draft manually.
 
 A tag must match the `project(CueFlow VERSION ...)` value in `CMakeLists.txt`; this prevents accidentally publishing artifacts with inconsistent versions. Release assets include `SHA256SUMS` for integrity checking.

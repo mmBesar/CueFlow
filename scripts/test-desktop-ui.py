@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Dependency-free structural regression checks for CueFlow's adaptive UI and app identity."""
+"""Dependency-free structural regression checks for CueFlow's responsive QML UI."""
 from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
 import re
-import struct
 import sys
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 QML = ROOT / "qml" / "Main.qml"
@@ -24,7 +22,8 @@ def check(condition: bool, message: str) -> None:
         fail(message)
 
 
-# Structural scan skips comments/strings and catches obvious bracket corruption.
+# This is a structural check, not a replacement for Qt's qmllint or a GUI run.
+# It catches broken delimiters and common regressions in the desktop panel source.
 stack: list[tuple[str, int]] = []
 pairs = {")": "(", "]": "[", "}": "{"}
 state = "code"
@@ -84,58 +83,47 @@ duplicates = {name: count for name, count in Counter(ids).items() if count > 1}
 check(not duplicates, f"duplicate QML ids: {duplicates}")
 
 required = {
-    "desktop right-hand control dock": 'id: desktopControlDock',
-    "main display stays in a separate workspace": 'id: displayWorkspace',
-    "narrow desktop transport controls": 'id: desktopCompactControls',
-    "collapsible compact tuning": 'id: desktopCompactTuning',
-    "readable desktop Play/Pause": 'text: session.playing ? "Pause" : "Play"',
-    "visible desktop Reset label": 'text: "Reset"',
-    "remote toggle label": 'text: session.hosting ? "Remote enabled" : "Enable remote"',
-    "right sidebar playback panel": 'id: desktopPlaybackPanel',
-    "right sidebar reading adjustment panel": 'id: desktopTuningPanel',
-    "text-size control in sidebar": 'id: displayFontSizeDesktop',
-    "text-width control in sidebar": 'id: displayWidthDesktop',
-    "Android retains its separate touch layout": 'visible: !window.desktopUi && !window.editingScript',
-    "app icon is used in the UI": 'source: "qrc:/icons/cueflow-icon.png"',
-    "wide remote view does not jump away from controls": 'if (!remoteContent.wideDesktop)',
+    "desktop two-column control deck": 'id: desktopDisplayControls',
+    "playback section": 'text: "PLAYBACK"',
+    "reading adjustments section": 'text: "READING ADJUSTMENTS"',
+    "play/pause text label": 'text: session.playing ? "Pause" : "Play"',
+    "reset text label": 'text: "Reset"',
+    "remote action label": 'text: session.hosting ? "Remote enabled" : "Enable remote"',
+    "text-size control": 'id: displayFontSizeDesktop',
+    "text-width control": 'id: displayWidthDesktop',
+    "desktop/mobile layout separation": 'visible: !window.desktopUi && !window.editingScript',
+    "Android remains touch-sized": 'implicitHeight: window.desktopUi ? 34 : 46',
+    "remote editor collapsed by default": 'property bool remoteEditorExpanded: false',
+    "remote editor only appears on request": 'visible: window.remoteEditorExpanded',
+    "desktop control deck is height-bounded": 'Layout.fillHeight: false',
+    "active remote state uses muted SVG-mauve": 'color: session.hosting ? window.activePalette.mauve : window.activePalette.text',
+    "remote editor remains optional": 'visible: window.remoteEditorExpanded',
+    "remote layout uses content height, not viewport-filling editor": 'height: implicitHeight',
 }
 for description, marker in required.items():
     check(marker in source, f"missing {description} ({marker})")
 
-check('window.width >= 1020' in source and 'Layout.preferredWidth: 316' in source,
-      "desktop dock breakpoint/width was changed without updating this test")
+check('columns: window.width >= 1020 ? 2 : 1' in source,
+      "desktop controls no longer adapt between side-by-side and stacked layouts")
+check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 8)' in source,
+      "narrow layouts should reveal the editor only after an explicit Edit action")
+check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)' not in source,
+      "remote toolbar must not automatically jump to the editor when the page is selected")
+check('Layout.fillHeight: true' not in source[source.index('id: desktopDisplayControls'):source.index('id: desktopSessionInfo')],
+      "desktop footer controls must not stretch and cover the reading area")
+check('Layout.fillHeight: remoteContent.wideDesktop' not in source,
+      "remote editor must have a bounded height instead of occupying the full page")
+check('Layout.columnSpan: remoteContent.wideDesktop && !window.remoteEditorExpanded ? 2 : 1' in source,
+      "remote controls should use the available width when the optional editor is closed")
+connected_card_start = source.index('''                    Layout.maximumWidth: window.desktopUi ? (remoteContent.wideDesktop ? (window.remoteEditorExpanded ? 480 : 660) : 680) : 1000000''')
+connected_card_end = source.index('id: remoteControls', connected_card_start)
+connected_card = source[connected_card_start:connected_card_end]
+check(connected_card.count('Layout.preferredWidth:') == 1,
+      "connected remote card must not define preferred width twice")
+check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)' not in source,
+      "selecting Remote or pressing its toolbar action must not jump to the editor automatically")
+check('session.hosting ? window.activePalette.green' not in source[source.index('id: remoteToggleDesktop'):source.index('id: displaySeekDesktop')],
+      "desktop remote-enabled state must use the muted SVG palette, not a saturated green fill")
 check('elide: Text.ElideNone' in source,
-      "remote button labels must not be deliberately elided")
-for compact_slider in ("displaySeekCompact", "displaySpeedCompact", "displayFontSizeCompact", "displayWidthCompact"):
-    check(source.count(f"!{compact_slider}.activeFocus") >= 5,
-          f"global keyboard shortcuts must yield while {compact_slider} is focused")
-icon_file = ROOT / "assets/icons/cueflow-icon.png"
-check(icon_file.is_file(), "generated app icon asset is missing")
-check((ROOT / "packaging/linux/cueflow.svg").is_file(), "scalable Linux icon is missing")
-try:
-    icon_svg = ET.parse(ROOT / "packaging/linux/cueflow.svg").getroot()
-except ET.ParseError as exc:
-    fail(f"scalable icon SVG is invalid: {exc}")
-check(icon_svg.tag.endswith("svg"), "scalable icon root is not an SVG")
-check((ROOT / "src/main.cpp").read_text(encoding="utf-8").find('setWindowIcon(QIcon(QStringLiteral(":/icons/cueflow-icon.png")))') >= 0,
-      "native window icon is not configured")
-check('QGuiApplication::setDesktopFileName(QStringLiteral("cueflow"))' in (ROOT / "src/main.cpp").read_text(encoding="utf-8"),
-      "Linux desktop-entry identity is not configured")
-check('BASE assets/icons' in (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
-      "Qt resource alias base must keep :/icons/cueflow-icon.png stable")
-for size in (16, 24, 32, 48, 64, 72, 96, 128, 144, 192, 256, 512):
-    png = ROOT / "assets/icons" / ("cueflow-icon.png" if size == 512 else f"cueflow-icon-{size}.png")
-    check(png.is_file(), f"icon size {size} is missing")
-    header = png.read_bytes()[:24]
-    check(header[:8] == b"\x89PNG\r\n\x1a\n", f"icon size {size} is not a PNG")
-    dimensions = struct.unpack(">II", header[16:24])
-    check(dimensions == (size, size), f"icon {png.name} has unexpected dimensions {dimensions}")
-for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):
-    modern = ROOT / "packaging/android/res" / f"mipmap-{density}" / "ic_launcher.png"
-    check(modern.is_file(), f"modern Android icon for {density} is missing")
-    check(f'"mipmap-{density}": {size}' in (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
-          f"legacy Android {density} icon staging is missing")
-check('QT_ANDROID_APP_ICON "@mipmap/ic_launcher"' in (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
-      "modern Android launcher icon property is missing")
-check((ROOT / "docs/releases/v0.1.0.md").is_file(), "first-release notes are missing")
-print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, adaptive desktop layout, remote controls, Android separation, app/window/launcher icons, and v0.1.0 release notes.")
+      "remote button label must not be deliberately elided")
+print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, desktop labels/layout, and Android sizing.")

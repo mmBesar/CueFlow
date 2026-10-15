@@ -23,6 +23,8 @@ ApplicationWindow {
     // Keep the reading/remote screens compact on phones; each mode remembers its own tuning state.
     property bool displayTuningExpanded: false
     property bool remoteTuningExpanded: false
+    // Keep the remote editor collapsed by default: playback controls are the primary remote view.
+    property bool remoteEditorExpanded: false
     property var flavorNames: ["Latte", "Frappé", "Macchiato", "Mocha"]
     property var accentNames: [
         "Rosewater", "Flamingo", "Pink", "Mauve", "Red", "Maroon",
@@ -178,16 +180,6 @@ ApplicationWindow {
             anchors.leftMargin: window.desktopUi ? 12 : 18
             anchors.rightMargin: window.desktopUi ? 12 : 18
             spacing: window.desktopUi ? 8 : 14
-            Image {
-                source: "qrc:/icons/cueflow-icon.png"
-                sourceSize.width: 64
-                sourceSize.height: 64
-                Layout.preferredWidth: window.desktopUi ? 26 : 32
-                Layout.preferredHeight: window.desktopUi ? 26 : 32
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-            }
             Label {
                 text: "CueFlow"
                 font.pixelSize: window.desktopUi ? 18 : 22
@@ -205,25 +197,27 @@ ApplicationWindow {
             Rectangle {
                 visible: window.width > 480
                 radius: 12
-                color: session.connected ? window.activePalette.green : session.hosting ? window.activePalette.surface1 : window.activePalette.surface0
+                color: window.activePalette.surface0
+                border.color: session.connected || session.hosting ? window.activePalette.mauve : window.activePalette.surface1
+                border.width: session.connected || session.hosting ? 1 : 0
                 implicitHeight: window.desktopUi ? 20 : 30
                 implicitWidth: statusLabel.implicitWidth + (window.desktopUi ? 14 : 18)
                 Label {
                     id: statusLabel
                     anchors.centerIn: parent
                     text: session.connected ? "REMOTE" : session.hosting ? "SESSION OPEN" : "LOCAL MODE"
-                    color: window.activePalette.base
+                    color: session.connected || session.hosting ? window.activePalette.mauve : window.activePalette.subtext1
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
                 }
             }
             Button {
-                text: session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit")
+                text: session.remoteMode ? (window.remoteEditorExpanded ? "Done" : "Edit") : (window.editingScript ? "Back" : "Edit")
                 implicitHeight: window.desktopUi ? 32 : 38
-                implicitWidth: window.desktopUi ? 56 : 66
+                implicitWidth: window.desktopUi ? (session.remoteMode ? 72 : 56) : 78
                 padding: window.desktopUi ? 4 : 6
                 ToolTip.visible: hovered
-                ToolTip.text: session.remoteMode ? "Edit or send a script" : (window.editingScript ? "Return to reading" : "Edit script")
+                ToolTip.text: session.remoteMode ? (window.remoteEditorExpanded ? "Close script editor" : "Edit or send a script") : (window.editingScript ? "Return to reading" : "Edit script")
                 contentItem: Item {
                     Row {
                         anchors.centerIn: parent
@@ -252,7 +246,7 @@ ApplicationWindow {
                         Rectangle { x: 2; y: 10; width: 5; height: 2; rotation: 45; color: window.activePalette.text }
                     }
                     Text {
-                        text: session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit")
+                        text: session.remoteMode ? (window.remoteEditorExpanded ? "Done" : "Edit") : (window.editingScript ? "Back" : "Edit")
                         color: window.activePalette.text
                         font.pixelSize: window.desktopUi ? 12 : 14
                         verticalAlignment: Text.AlignVCenter
@@ -261,12 +255,21 @@ ApplicationWindow {
                 }
                 onClicked: {
                     if (session.remoteMode) {
-                        // On wide desktop, keep the remote control card visible beside
-                        // the editor. On narrow screens the editor is below the controls,
-                        // so intentionally bring it into view when Edit is requested.
-                        if (!remoteContent.wideDesktop)
-                            remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)
-                        Qt.callLater(function() { remoteScriptEditor.forceActiveFocus() })
+                        if (window.remoteEditorExpanded) {
+                            window.remoteEditorExpanded = false
+                            Qt.callLater(function() { remoteFlick.contentY = 0 })
+                        } else {
+                            window.remoteEditorExpanded = true
+                            // Wide desktops keep the control deck visible beside the editor.
+                            // On narrow layouts, scroll only because the user explicitly opened Edit.
+                            Qt.callLater(function() {
+                                if (!window.remoteEditorExpanded)
+                                    return
+                                if (!remoteContent.wideDesktop)
+                                    remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 8)
+                                remoteScriptEditor.forceActiveFocus()
+                            })
+                        }
                     } else if (!window.editingScript) {
                         // Keep an existing draft intact; entering the editor must not
                         // silently discard text left from a previous editing session.
@@ -315,7 +318,13 @@ ApplicationWindow {
             Layout.minimumHeight: window.desktopUi ? 30 : 48
             implicitHeight: window.desktopUi ? 30 : 48
             currentIndex: session.remoteMode ? 1 : 0
-            onCurrentIndexChanged: session.setMode(currentIndex === 1 ? "remote" : "display")
+            onCurrentIndexChanged: {
+                session.setMode(currentIndex === 1 ? "remote" : "display")
+                if (currentIndex === 1) {
+                    window.remoteEditorExpanded = false
+                    Qt.callLater(function() { remoteFlick.contentY = 0 })
+                }
+            }
             background: Rectangle { color: window.activePalette.mantle }
             TabButton { text: "Display"; implicitHeight: window.desktopUi ? 30 : 48; Layout.minimumHeight: window.desktopUi ? 30 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 12 : 14 }
             TabButton { text: "Remote"; implicitHeight: window.desktopUi ? 30 : 48; Layout.minimumHeight: window.desktopUi ? 30 : 48; padding: window.desktopUi ? 2 : 8; font.pixelSize: window.desktopUi ? 12 : 14 }
@@ -331,13 +340,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 0
 
-                RowLayout {
-                    id: displayWorkspace
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: window.desktopUi && window.width >= 1020 ? 10 : 0
-
-                    StackLayout {
+                StackLayout {
                     id: displayStack
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -745,39 +748,28 @@ ApplicationWindow {
                     }
                 }
 
-                    Rectangle {
-                        id: desktopDockDivider
-                        visible: desktopControlDock.visible
-                        Layout.preferredWidth: 1
-                        Layout.fillHeight: true
-                        color: window.activePalette.surface1
-                    }
-
-                    Flickable {
-                        id: desktopControlDock
-                        visible: window.desktopUi && window.width >= 1020 && !window.editingScript
-                                 && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
-                        Layout.preferredWidth: 316
-                        Layout.minimumWidth: 292
-                        Layout.maximumWidth: 340
-                        Layout.fillHeight: true
-                        clip: true
-                        contentWidth: width
-                        contentHeight: desktopDisplayControls.implicitHeight + 16
-                        boundsBehavior: Flickable.StopAtBounds
-                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-                        // A proper right-hand dock: controls size to their content,
-                        // while the reading viewport keeps the rest of the window.
-                        GridLayout {
-                            id: desktopDisplayControls
-                            x: 6
-                            y: 8
-                            width: Math.max(1, desktopControlDock.width - 12)
-                            height: implicitHeight
-                            columns: 1
-                            columnSpacing: 0
-                            rowSpacing: 8
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: window.activePalette.surface1
+                    visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                }
+                // Desktop-only control deck: actions/progress on the left,
+                // reading adjustments on the right. Android keeps the touch layout below.
+                GridLayout {
+                    id: desktopDisplayControls
+                    visible: window.desktopUi && !window.editingScript
+                             && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                    Layout.fillWidth: true
+                    Layout.fillHeight: false
+                    Layout.minimumHeight: 0
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
+                    columns: window.width >= 1020 ? 2 : 1
+                    columnSpacing: 12
+                    rowSpacing: 8
 
                     Rectangle {
                         id: desktopPlaybackPanel
@@ -785,7 +777,8 @@ ApplicationWindow {
                         Layout.column: 0
                         Layout.fillWidth: true
                         Layout.fillHeight: false
-                        Layout.minimumWidth: 0
+                        Layout.minimumWidth: window.width >= 1020 ? 330 : 0
+                        Layout.preferredWidth: window.width >= 1020 ? Math.min(460, window.width * 0.40) : -1
                         implicitHeight: desktopPlaybackContent.implicitHeight + 20
                         radius: 10
                         color: window.activePalette.mantle
@@ -810,14 +803,16 @@ ApplicationWindow {
                                 Item { Layout.fillWidth: true }
                                 Rectangle {
                                     radius: 10
-                                    color: session.playing ? window.activePalette.green : window.activePalette.surface0
+                                    color: window.activePalette.surface0
+                                    border.color: session.playing ? window.activePalette.mauve : window.activePalette.surface1
+                                    border.width: 1
                                     implicitWidth: playbackStateLabel.implicitWidth + 14
                                     implicitHeight: 22
                                     Label {
                                         id: playbackStateLabel
                                         anchors.centerIn: parent
                                         text: session.playing ? "PLAYING" : "PAUSED"
-                                        color: session.playing ? window.contrastingText(window.activePalette.green) : window.activePalette.subtext1
+                                        color: session.playing ? window.activePalette.mauve : window.activePalette.subtext1
                                         font.pixelSize: 10
                                         font.weight: Font.DemiBold
                                     }
@@ -830,8 +825,8 @@ ApplicationWindow {
 
                                 Button {
                                     id: displayPlayPauseDesktop
-                                    Layout.preferredWidth: 78
-                                    Layout.minimumWidth: 72
+                                    Layout.preferredWidth: 96
+                                    Layout.minimumWidth: 88
                                     implicitHeight: 36
                                     padding: 8
                                     font.pixelSize: 13
@@ -841,8 +836,8 @@ ApplicationWindow {
                                 }
                                 Button {
                                     id: displayResetDesktop
-                                    Layout.preferredWidth: 66
-                                    Layout.minimumWidth: 60
+                                    Layout.preferredWidth: 82
+                                    Layout.minimumWidth: 76
                                     implicitHeight: 36
                                     padding: 8
                                     font.pixelSize: 13
@@ -852,8 +847,8 @@ ApplicationWindow {
                                 Button {
                                     id: remoteToggleDesktop
                                     Layout.fillWidth: true
-                                    Layout.minimumWidth: 112
-                                    Layout.preferredWidth: 132
+                                    Layout.minimumWidth: 132
+                                    Layout.preferredWidth: 152
                                     implicitHeight: 36
                                     padding: 8
                                     font.pixelSize: 12
@@ -862,12 +857,13 @@ ApplicationWindow {
                                     highlighted: session.hosting
                                     background: Rectangle {
                                         radius: 8
-                                        color: session.hosting ? window.activePalette.green : window.activePalette.surface0
-                                        border.color: session.hosting ? window.activePalette.green : window.activePalette.surface1
+                                        color: window.activePalette.surface0
+                                        border.color: session.hosting ? window.activePalette.mauve : window.activePalette.surface1
+                                        border.width: session.hosting ? 2 : 1
                                     }
                                     contentItem: Text {
                                         text: remoteToggleDesktop.text
-                                        color: session.hosting ? window.contrastingText(window.activePalette.green) : window.activePalette.text
+                                        color: session.hosting ? window.activePalette.mauve : window.activePalette.text
                                         font: remoteToggleDesktop.font
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
@@ -919,8 +915,8 @@ ApplicationWindow {
 
                     Rectangle {
                         id: desktopTuningPanel
-                        Layout.row: 1
-                        Layout.column: 0
+                        Layout.row: window.width >= 1020 ? 0 : 1
+                        Layout.column: window.width >= 1020 ? 1 : 0
                         Layout.fillWidth: true
                         Layout.fillHeight: false
                         Layout.minimumWidth: 0
@@ -957,7 +953,7 @@ ApplicationWindow {
                             GridLayout {
                                 id: desktopTuningGrid
                                 Layout.fillWidth: true
-                                columns: 1
+                                columns: desktopTuningPanel.width >= 600 ? 3 : (desktopTuningPanel.width >= 420 ? 2 : 1)
                                 columnSpacing: 14
                                 rowSpacing: 7
 
@@ -1056,9 +1052,9 @@ ApplicationWindow {
 
                     Rectangle {
                         id: desktopSessionInfo
-                        Layout.row: 2
+                        Layout.row: window.width >= 1020 ? 1 : 2
                         Layout.column: 0
-                        Layout.columnSpan: 1
+                        Layout.columnSpan: desktopDisplayControls.columns
                         Layout.fillWidth: true
                         visible: session.hosting || session.status.length > 0
                         radius: 8
@@ -1066,231 +1062,35 @@ ApplicationWindow {
                         border.color: window.activePalette.surface1
                         implicitHeight: desktopSessionContent.implicitHeight + 14
 
-                        ColumnLayout {
+                        RowLayout {
                             id: desktopSessionContent
                             anchors.fill: parent
                             anchors.margins: 8
-                            spacing: 4
+                            spacing: 12
                             ColumnLayout {
                                 visible: session.hosting
                                 Layout.fillWidth: true
-                                spacing: 3
+                                spacing: 2
                                 Label { text: "Pair another device"; font.bold: true; font.pixelSize: 12; color: window.activePalette.text }
                                 Label { text: "Address: " + session.localAddresses.join("  ·  "); wrapMode: Text.Wrap; font.pixelSize: 11; color: window.activePalette.subtext1; Layout.fillWidth: true }
                                 Label { text: "Port: " + session.port + "     PIN: " + session.pin; font.pixelSize: 11; color: window.activePalette.subtext1 }
                             }
+                            Item { visible: session.hosting; Layout.fillWidth: true }
                             Label {
-                                visible: session.status.length > 0
                                 text: session.status
                                 color: window.activePalette.subtext0
                                 font.pixelSize: 11
                                 wrapMode: Text.Wrap
+                                Layout.maximumWidth: session.hosting ? 360 : 1000
                                 Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignRight
                             }
                         }
                     }
                 }
 
-                } // desktopControlDock
-            } // displayWorkspace
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: window.activePalette.surface1
-                visible: !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
-                         && (!window.desktopUi || window.width < 1020)
-            }
-
-            // Compact desktop transport bar for narrow windows. The reading view
-            // retains priority; less-used tuning controls expand only on demand.
-            ColumnLayout {
-                id: desktopCompactControls
-                visible: window.desktopUi && window.width < 1020 && !window.editingScript
-                         && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
-                Layout.fillWidth: true
-                Layout.leftMargin: 10
-                Layout.rightMargin: 10
-                Layout.topMargin: 6
-                Layout.bottomMargin: 6
-                spacing: 5
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    Button {
-                        Layout.preferredWidth: 82
-                        Layout.minimumWidth: 76
-                        implicitHeight: 36
-                        font.pixelSize: 12
-                        text: session.playing ? "Pause" : "Play"
-                        highlighted: true
-                        onClicked: session.togglePlayback()
-                    }
-                    Button {
-                        Layout.preferredWidth: 72
-                        Layout.minimumWidth: 64
-                        implicitHeight: 36
-                        font.pixelSize: 12
-                        text: "Reset"
-                        onClicked: session.resetPlayback()
-                    }
-                    Button {
-                        id: remoteToggleCompact
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 112
-                        implicitHeight: 36
-                        font.pixelSize: 12
-                        text: session.hosting ? "Remote enabled" : "Enable remote"
-                        background: Rectangle {
-                            radius: 8
-                            color: session.hosting ? window.activePalette.green : window.activePalette.surface0
-                            border.color: session.hosting ? window.activePalette.green : window.activePalette.surface1
-                        }
-                        contentItem: Text {
-                            text: remoteToggleCompact.text
-                            color: session.hosting ? window.contrastingText(window.activePalette.green) : window.activePalette.text
-                            font: remoteToggleCompact.font
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideNone
-                            wrapMode: Text.NoWrap
-                        }
-                        onClicked: session.hosting ? session.stopHosting() : session.startHosting()
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    Label { text: "Position"; color: window.activePalette.subtext1; font.pixelSize: 11 }
-                    Slider {
-                        id: displaySeekCompact
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 24
-                        Layout.minimumHeight: 22
-                        from: 0; to: 1; stepSize: 0.0001
-                        Binding { target: displaySeekCompact; property: "value"; value: session.progress; when: !displaySeekCompact.pressed }
-                        onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
-                        onMoved: session.seekTo(value)
-                        WheelHandler {
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            onWheel: function(event) {
-                                const direction = window.wheelDirection(event)
-                                if (direction !== 0) {
-                                    session.beginSeek()
-                                    session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)))
-                                    session.endSeek()
-                                    event.accepted = true
-                                }
-                            }
-                        }
-                    }
-                    Label {
-                        visible: window.width >= 460
-                        text: Math.round(session.progress * 1000) / 10 + "%"
-                        color: window.activePalette.subtext1
-                        font.pixelSize: 11
-                    }
-                    Button {
-                        Layout.preferredWidth: 62
-                        Layout.minimumWidth: 58
-                        implicitHeight: 32
-                        font.pixelSize: 11
-                        text: window.displayTuningExpanded ? "Hide tune" : "Tune"
-                        onClicked: window.displayTuningExpanded = !window.displayTuningExpanded
-                    }
-                }
-
-                GridLayout {
-                    id: desktopCompactTuning
-                    visible: window.displayTuningExpanded
-                    Layout.fillWidth: true
-                    columns: window.width >= 780 ? 3 : (window.width >= 540 ? 2 : 1)
-                    columnSpacing: 12
-                    rowSpacing: 4
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Label { text: "Speed · " + Math.round(session.speed) + " px/s"; font.pixelSize: 11; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displaySpeedCompact
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                            from: 0; to: 600; stepSize: 1
-                            Binding { target: displaySpeedCompact; property: "value"; value: session.speed; when: !displaySpeedCompact.pressed }
-                            onMoved: session.setSpeed(value)
-                            WheelHandler {
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                onWheel: function(event) {
-                                    const direction = window.wheelDirection(event)
-                                    if (direction !== 0) {
-                                        session.setSpeed(Math.max(0, Math.min(600, session.speed + direction * 10)))
-                                        event.accepted = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Label { text: "Text size · " + session.fontSize + " pt"; font.pixelSize: 11; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displayFontSizeCompact
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                            from: 12; to: 100; stepSize: 1
-                            Binding { target: displayFontSizeCompact; property: "value"; value: session.fontSize; when: !displayFontSizeCompact.pressed }
-                            onMoved: session.setFontSize(value)
-                            WheelHandler {
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                onWheel: function(event) {
-                                    const direction = window.wheelDirection(event)
-                                    if (direction !== 0) {
-                                        session.setFontSize(Math.max(12, Math.min(100, session.fontSize + direction)))
-                                        event.accepted = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Label { text: "Text width · " + session.textWidth + "%"; font.pixelSize: 11; color: window.activePalette.subtext1 }
-                        Slider {
-                            id: displayWidthCompact
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                            from: 35; to: 100; stepSize: 1
-                            Binding { target: displayWidthCompact; property: "value"; value: session.textWidth; when: !displayWidthCompact.pressed }
-                            onMoved: session.setTextWidth(value)
-                            WheelHandler {
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                onWheel: function(event) {
-                                    const direction = window.wheelDirection(event)
-                                    if (direction !== 0) {
-                                        session.setTextWidth(Math.max(35, Math.min(100, session.textWidth + direction)))
-                                        event.accepted = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Label {
-                    visible: session.hosting || session.status.length > 0
-                    text: session.hosting
-                          ? ("Address: " + session.localAddresses.join("  ·  ") + "     PIN: " + session.pin + "     Port: " + session.port)
-                          : session.status
-                    Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                    color: window.activePalette.subtext0
-                    font.pixelSize: 10
-                }
-            }
-
-            ColumnLayout {
-                visible: !window.desktopUi && !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
+                ColumnLayout {
+                    visible: !window.desktopUi && !window.editingScript && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
                     Layout.fillWidth: true
                     Layout.leftMargin: window.desktopUi ? 8 : 10
                     Layout.rightMargin: window.desktopUi ? 8 : 10
@@ -1334,12 +1134,13 @@ ApplicationWindow {
                             highlighted: session.hosting
                             background: Rectangle {
                                 radius: 8
-                                color: session.hosting ? window.activePalette.green : window.activePalette.surface0
-                                border.color: session.hosting ? window.activePalette.green : window.activePalette.surface1
+                                color: window.activePalette.surface0
+                                border.color: session.hosting ? window.activePalette.mauve : window.activePalette.surface1
+                                border.width: session.hosting ? 2 : 1
                             }
                             contentItem: Text {
                                 text: remoteToggleButton.text
-                                color: session.hosting ? window.contrastingText(window.activePalette.green) : window.activePalette.text
+                                color: session.hosting ? window.activePalette.mauve : window.activePalette.text
                                 font: remoteToggleButton.font
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -1517,7 +1318,7 @@ ApplicationWindow {
                     x: contentMargin
                     y: contentMargin
                     width: Math.max(1, remoteFlick.width - contentMargin * 2)
-                    height: Math.max(implicitHeight, remoteFlick.height - contentMargin * 2)
+                    height: implicitHeight
                     columns: wideDesktop ? 2 : 1
                     columnSpacing: wideDesktop ? 14 : 0
                     rowSpacing: window.width < 600 ? 10 : (window.desktopUi ? 6 : 16)
@@ -1545,10 +1346,12 @@ ApplicationWindow {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.maximumWidth: window.desktopUi ? 360 : 1000000
+                    Layout.preferredWidth: window.desktopUi ? (remoteContent.wideDesktop ? 440 : 620) : -1
+                    Layout.maximumWidth: window.desktopUi ? (remoteContent.wideDesktop ? 520 : 680) : 1000000
+                    Layout.columnSpan: remoteContent.wideDesktop ? 2 : 1
                     Layout.row: 2
                     Layout.column: 0
-                    Layout.alignment: Qt.AlignTop
+                    Layout.alignment: remoteContent.wideDesktop ? (Qt.AlignHCenter | Qt.AlignTop) : Qt.AlignTop
                     visible: !session.connected
                     TextField {
                         id: hostField
@@ -1584,10 +1387,12 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.maximumWidth: window.desktopUi ? 360 : 1000000
+                    Layout.maximumWidth: window.desktopUi ? (remoteContent.wideDesktop ? (window.remoteEditorExpanded ? 480 : 660) : 680) : 1000000
+                    Layout.preferredWidth: window.desktopUi ? (remoteContent.wideDesktop ? (window.remoteEditorExpanded ? 440 : 620) : 620) : -1
+                    Layout.columnSpan: remoteContent.wideDesktop && !window.remoteEditorExpanded ? 2 : 1
                     Layout.row: 2
                     Layout.column: 0
-                    Layout.alignment: Qt.AlignTop
+                    Layout.alignment: remoteContent.wideDesktop && !window.remoteEditorExpanded ? (Qt.AlignHCenter | Qt.AlignTop) : Qt.AlignTop
                     radius: 12
                     color: window.activePalette.mantle
                     border.color: window.activePalette.surface1
@@ -1690,9 +1495,8 @@ ApplicationWindow {
                                 onClicked: window.remoteTuningExpanded = !window.remoteTuningExpanded
                             }
                             Button {
-                                visible: !window.desktopUi
                                 Layout.fillWidth: true
-                                text: "Reset to beginning"
+                                text: "Reset"
                                 implicitHeight: window.desktopUi ? 34 : 46
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
@@ -1762,24 +1566,18 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Button {
-                            visible: window.width >= 760
-                            text: "Reset"
-                            implicitHeight: window.desktopUi ? 34 : 46
-                            padding: window.desktopUi ? 4 : 8
-                            font.pixelSize: window.desktopUi ? 12 : 14
-                            onClicked: session.resetPlayback()
-                        }
                     }
                 }
 
                 Frame {
                     id: remoteEditorFrame
                     Layout.fillWidth: true
-                    Layout.fillHeight: remoteContent.wideDesktop
+                    Layout.fillHeight: false
+                    Layout.preferredWidth: remoteContent.wideDesktop ? -1 : (window.desktopUi ? 620 : -1)
+                    Layout.maximumWidth: remoteContent.wideDesktop ? 760 : (window.desktopUi ? 680 : 1000000)
                     Layout.row: remoteContent.wideDesktop ? 2 : 3
                     Layout.column: remoteContent.wideDesktop ? 1 : 0
-                    visible: true
+                    visible: window.remoteEditorExpanded
                     background: Rectangle { color: window.activePalette.mantle; radius: 10; border.color: window.activePalette.surface1 }
                     ColumnLayout {
                         anchors.fill: parent
@@ -1790,13 +1588,13 @@ ApplicationWindow {
                             id: remoteScriptEditorScroll
                             Layout.fillWidth: true
                             Layout.preferredHeight: remoteContent.wideDesktop
-                                                  ? Math.max(360, Math.min(560, remoteFlick.height - 120))
+                                                  ? Math.max(220, Math.min(360, remoteFlick.height * 0.48))
                                                   : (window.width < 600
                                                      ? Math.max(120, Math.min(180, remoteFlick.height * 0.25))
-                                                     : (window.desktopUi ? Math.max(160, Math.min(230, remoteFlick.height * 0.28))
-                                                                         : Math.max(200, Math.min(320, remoteFlick.height * 0.32))))
-                            Layout.minimumHeight: 100
-                            Layout.fillHeight: remoteContent.wideDesktop
+                                                     : (window.desktopUi ? Math.max(160, Math.min(230, remoteFlick.height * 0.30))
+                                                                         : Math.max(200, Math.min(300, remoteFlick.height * 0.32))))
+                            Layout.minimumHeight: 120
+                            Layout.fillHeight: false
                             padding: 0
                             background: Rectangle {
                                 color: window.activePalette.base
@@ -1861,7 +1659,11 @@ ApplicationWindow {
                                 padding: window.desktopUi ? 4 : 8
                                 font.pixelSize: window.desktopUi ? 12 : 14
                                 highlighted: true
-                                onClicked: session.sendDraftScript()
+                                onClicked: {
+                                    session.sendDraftScript()
+                                    window.remoteEditorExpanded = false
+                                    Qt.callLater(function() { remoteFlick.contentY = 0 })
+                                }
                             }
                         }
                     }
@@ -1992,8 +1794,6 @@ ApplicationWindow {
                  && !displayFontSize.activeFocus && !displayWidth.activeFocus
                  && !displaySeekDesktop.activeFocus && !displaySpeedDesktop.activeFocus
                  && !displayFontSizeDesktop.activeFocus && !displayWidthDesktop.activeFocus
-                 && !displaySeekCompact.activeFocus && !displaySpeedCompact.activeFocus
-                 && !displayFontSizeCompact.activeFocus && !displayWidthCompact.activeFocus
                  && !remoteSeek.activeFocus && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus && !remoteWidth.activeFocus
         onActivated: session.togglePlayback()
@@ -2030,8 +1830,6 @@ ApplicationWindow {
                  && !displaySpeedDesktop.activeFocus
                  && !displayFontSizeDesktop.activeFocus
                  && !displayWidthDesktop.activeFocus
-                 && !displaySeekCompact.activeFocus && !displaySpeedCompact.activeFocus
-                 && !displayFontSizeCompact.activeFocus && !displayWidthCompact.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -2054,8 +1852,6 @@ ApplicationWindow {
                  && !displaySpeedDesktop.activeFocus
                  && !displayFontSizeDesktop.activeFocus
                  && !displayWidthDesktop.activeFocus
-                 && !displaySeekCompact.activeFocus && !displaySpeedCompact.activeFocus
-                 && !displayFontSizeCompact.activeFocus && !displayWidthCompact.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -2078,8 +1874,6 @@ ApplicationWindow {
                  && !displaySpeedDesktop.activeFocus
                  && !displayFontSizeDesktop.activeFocus
                  && !displayWidthDesktop.activeFocus
-                 && !displaySeekCompact.activeFocus && !displaySpeedCompact.activeFocus
-                 && !displayFontSizeCompact.activeFocus && !displayWidthCompact.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus
@@ -2102,8 +1896,6 @@ ApplicationWindow {
                  && !displaySpeedDesktop.activeFocus
                  && !displayFontSizeDesktop.activeFocus
                  && !displayWidthDesktop.activeFocus
-                 && !displaySeekCompact.activeFocus && !displaySpeedCompact.activeFocus
-                 && !displayFontSizeCompact.activeFocus && !displayWidthCompact.activeFocus
                  && !remoteSeek.activeFocus
                  && !remoteSpeed.activeFocus
                  && !remoteFontSize.activeFocus

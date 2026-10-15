@@ -2,7 +2,4 @@
   <qresource prefix="/qml">
     <file alias="Main.qml">generated/Main.qml</file>
   </qresource>
-  <qresource prefix="/icons">
-    <file alias="cueflow-icon.png">../assets/icons/cueflow-icon.png</file>
-  </qresource>
 </RCC>
