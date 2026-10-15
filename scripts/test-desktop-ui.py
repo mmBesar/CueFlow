@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Dependency-free structural regression checks for CueFlow's responsive QML UI."""
+"""Dependency-free structural regression checks for CueFlow's adaptive UI and app identity."""
 from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
 import re
+import struct
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 QML = ROOT / "qml" / "Main.qml"
@@ -22,70 +24,7 @@ def check(condition: bool, message: str) -> None:
         fail(message)
 
 
-def object_block_for_id(object_id: str) -> tuple[str, str]:
-    """Return an item's QML block and the indentation used by its direct properties."""
-    match = re.search(r"^(\s*)id:\s*" + re.escape(object_id) + r"\s*$", source, re.MULTILINE)
-    if not match:
-        fail(f"cannot find QML object id {object_id}")
-    indent = match.group(1)
-    opening = source.rfind("{", 0, match.start())
-    if opening < 0:
-        fail(f"cannot find object opening brace for {object_id}")
-    # Walk braces while ignoring comments and quoted strings, so nested children do not
-    # accidentally count as direct properties of the object being inspected.
-    depth = 0
-    state = "code"
-    quote = ""
-    i = opening
-    while i < len(source):
-        char = source[i]
-        following = source[i + 1] if i + 1 < len(source) else ""
-        if state == "line_comment":
-            if char == "\n":
-                state = "code"
-            i += 1
-            continue
-        if state == "block_comment":
-            if char == "*" and following == "/":
-                state = "code"
-                i += 2
-                continue
-            i += 1
-            continue
-        if state == "string":
-            if char == "\\":
-                i += 2
-                continue
-            if char == quote:
-                state = "code"
-            i += 1
-            continue
-        if char == "/" and following == "/":
-            state = "line_comment"
-            i += 2
-            continue
-        if char == "/" and following == "*":
-            state = "block_comment"
-            i += 2
-            continue
-        if char in ("\"", "'"):
-            state = "string"
-            quote = char
-            i += 1
-            continue
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return source[opening:i + 1], indent
-        i += 1
-    fail(f"unclosed object block for {object_id}")
-    raise AssertionError("unreachable")
-
-
-# This is a structural check, not a replacement for Qt's qmllint or a GUI run.
-# It catches broken delimiters and common regressions in the desktop panel source.
+# Structural scan skips comments/strings and catches obvious bracket corruption.
 stack: list[tuple[str, int]] = []
 pairs = {")": "(", "]": "[", "}": "{"}
 state = "code"
@@ -145,79 +84,58 @@ duplicates = {name: count for name, count in Counter(ids).items() if count > 1}
 check(not duplicates, f"duplicate QML ids: {duplicates}")
 
 required = {
-    "desktop natural-height control dock": 'id: desktopDisplayControls',
-    "desktop playback action grid": 'id: desktopPlaybackPanel',
-    "desktop reading adjustment panel": 'id: desktopTuningPanel',
-    "desktop session pairing row": 'id: desktopSessionInfo',
-    "reading adjustments section": 'text: "READING ADJUSTMENTS"',
-    "play/pause text label": 'text: session.playing ? "Pause" : "Play"',
-    "reset text label": 'text: "Reset"',
-    "remote action labels": '"Remote enabled"',
-    "remote enable label": '"Enable remote"',
-    "desktop remote workspace": 'id: remoteDesktopLayout',
-    "desktop fixed control sidebar": 'id: remoteDesktopControlPanel',
-    "desktop script editor pane": 'id: remoteDesktopScriptEditor',
-    "desktop overview panel": 'id: remoteDesktopOverviewPanel',
-    "desktop remote transport grid": 'id: remoteDesktopTransportButtons',
-    "remote editor is opt-in": 'property bool remoteEditorVisible: false',
-    "narrow remote transport grid": 'id: compactRemoteTransportButtons',
-    "desktop remote position control": 'id: remoteDesktopSeek',
-    "desktop remote speed control": 'id: remoteDesktopSpeed',
-    "text-size control": 'id: displayFontSizeDesktop',
-    "text-width control": 'id: displayWidthDesktop',
-    "desktop/mobile layout separation": 'visible: !window.desktopUi && !window.editingScript',
-    "Android remains touch-sized": 'implicitHeight: window.desktopUi ? 34 : 46',
+    "desktop right-hand control dock": 'id: desktopControlDock',
+    "main display stays in a separate workspace": 'id: displayWorkspace',
+    "narrow desktop transport controls": 'id: desktopCompactControls',
+    "collapsible compact tuning": 'id: desktopCompactTuning',
+    "readable desktop Play/Pause": 'text: session.playing ? "Pause" : "Play"',
+    "visible desktop Reset label": 'text: "Reset"',
+    "remote toggle label": 'text: session.hosting ? "Remote enabled" : "Enable remote"',
+    "right sidebar playback panel": 'id: desktopPlaybackPanel',
+    "right sidebar reading adjustment panel": 'id: desktopTuningPanel',
+    "text-size control in sidebar": 'id: displayFontSizeDesktop',
+    "text-width control in sidebar": 'id: displayWidthDesktop',
+    "Android retains its separate touch layout": 'visible: !window.desktopUi && !window.editingScript',
+    "app icon is used in the UI": 'source: "qrc:/icons/cueflow-icon.png"',
+    "wide remote view does not jump away from controls": 'if (!remoteContent.wideDesktop)',
 }
 for description, marker in required.items():
     check(marker in source, f"missing {description} ({marker})")
 
-check('columns: window.width >= 760 ? 4 : 2' in source,
-      "desktop display actions should keep a one-row wide layout and reflow on narrow windows")
-check('visible: window.desktopUi && window.width >= 900' in source,
-      "wide desktop remote workspace is not enabled")
-check('visible: !(window.desktopUi && window.width >= 900)' in source,
-      "the scrolling mobile/narrow remote page can overlap the wide desktop workspace")
-check('remoteDesktopScriptEditor.forceActiveFocus()' in source,
-      "the desktop Edit action must focus the editor without scrolling controls away")
-check('visible: window.remoteEditorVisible' in source,
-      "both remote script editors must be hidden until editing is requested")
-check('Layout.maximumHeight: window.width >= 1020' not in source,
-      "desktop control area must not be capped below its visible content")
-check('visible: window.displayTuningExpanded' in source,
-      "desktop tuning sliders must collapse until explicitly requested")
-check('columns: window.remoteEditorVisible ? 2 : 4' in source,
-      "wide remote transport buttons should reflow when the editor narrows the sidebar")
-check('columns: remoteContent.width >= 620 ? 3 : 2' in source,
-      "narrow remote transport buttons should reflow rather than squeeze labels")
-check('if (remoteFlick.visible && !remoteScriptEditor.activeFocus' in source,
-      "the hidden narrow-layout editor must not mirror every desktop keystroke")
-check('if (remoteDesktopLayout.visible && !remoteDesktopScriptEditor.activeFocus' in source,
-      "the hidden desktop editor must not mirror every mobile keystroke")
-remote_desktop_layout = source[source.index('id: remoteDesktopLayout'):source.index('id: remoteDesktopWorkspace')]
-check('onVisibleChanged: {' in remote_desktop_layout,
-      "the desktop editor must resync drafts when switching back from the compact layout")
-remote_flick = source[source.index('id: remoteFlick'):source.index('id: remoteContent')]
-check('onVisibleChanged: {' in remote_flick,
-      "the stacked editor must resync drafts when the window returns to its compact layout")
-check('implicitHeight: desktopDisplayContent.implicitHeight + 16' in source,
-      "desktop control dock should size itself to its content rather than overflow a hard height cap")
-check('Layout.fillWidth: false' in source[source.index('id: displayPlayPauseDesktop'):source.index('id: displayResetDesktop')],
-      "desktop playback buttons must not stretch to fill the whole window")
-check('visible: session.hosting' in source[source.index('id: desktopSessionInfo'):source.index('id: desktopSessionContent')],
-      "the desktop session-info row should not reserve space when hosting is inactive")
-check(source.count('&& !remoteDesktopScriptEditor.activeFocus') >= 5,
-      "all keyboard shortcuts must yield while the wide desktop script editor has focus")
-check(source.count('&& !remoteDesktopHostField.activeFocus') == 5,
-      "all keyboard shortcuts must yield while the wide desktop address field has focus")
-check(source.count('&& !remoteDesktopPinField.activeFocus') == 5,
-      "all keyboard shortcuts must yield while the wide desktop PIN field has focus")
+check('window.width >= 1020' in source and 'Layout.preferredWidth: 316' in source,
+      "desktop dock breakpoint/width was changed without updating this test")
 check('elide: Text.ElideNone' in source,
-      "remote button label must not be deliberately elided")
-check('visible: !window.remoteEditorVisible' in source,
-      "desktop remote overview should replace the script editor while editing is closed")
-for editor_id in ("remoteEditorFrame", "remoteDesktopEditorPanel"):
-    block, indent = object_block_for_id(editor_id)
-    direct_visible = re.findall(r"^" + re.escape(indent) + r"visible:\s*(.+?)\s*$", block, re.MULTILINE)
-    check(len(direct_visible) == 1 and direct_visible[0] == "window.remoteEditorVisible",
-          f"{editor_id} must have one authoritative remoteEditorVisible binding (got {direct_visible})")
-print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, content-sized display dock, remote editor toggle, readable transport layouts, and Android sizing.")
+      "remote button labels must not be deliberately elided")
+for compact_slider in ("displaySeekCompact", "displaySpeedCompact", "displayFontSizeCompact", "displayWidthCompact"):
+    check(source.count(f"!{compact_slider}.activeFocus") >= 5,
+          f"global keyboard shortcuts must yield while {compact_slider} is focused")
+icon_file = ROOT / "assets/icons/cueflow-icon.png"
+check(icon_file.is_file(), "generated app icon asset is missing")
+check((ROOT / "packaging/linux/cueflow.svg").is_file(), "scalable Linux icon is missing")
+try:
+    icon_svg = ET.parse(ROOT / "packaging/linux/cueflow.svg").getroot()
+except ET.ParseError as exc:
+    fail(f"scalable icon SVG is invalid: {exc}")
+check(icon_svg.tag.endswith("svg"), "scalable icon root is not an SVG")
+check((ROOT / "src/main.cpp").read_text(encoding="utf-8").find('setWindowIcon(QIcon(QStringLiteral(":/icons/cueflow-icon.png")))') >= 0,
+      "native window icon is not configured")
+check('QGuiApplication::setDesktopFileName(QStringLiteral("cueflow"))' in (ROOT / "src/main.cpp").read_text(encoding="utf-8"),
+      "Linux desktop-entry identity is not configured")
+check('BASE assets/icons' in (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+      "Qt resource alias base must keep :/icons/cueflow-icon.png stable")
+for size in (16, 24, 32, 48, 64, 72, 96, 128, 144, 192, 256, 512):
+    png = ROOT / "assets/icons" / ("cueflow-icon.png" if size == 512 else f"cueflow-icon-{size}.png")
+    check(png.is_file(), f"icon size {size} is missing")
+    header = png.read_bytes()[:24]
+    check(header[:8] == b"\x89PNG\r\n\x1a\n", f"icon size {size} is not a PNG")
+    dimensions = struct.unpack(">II", header[16:24])
+    check(dimensions == (size, size), f"icon {png.name} has unexpected dimensions {dimensions}")
+for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):
+    modern = ROOT / "packaging/android/res" / f"mipmap-{density}" / "ic_launcher.png"
+    check(modern.is_file(), f"modern Android icon for {density} is missing")
+    check(f'"mipmap-{density}": {size}' in (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+          f"legacy Android {density} icon staging is missing")
+check('QT_ANDROID_APP_ICON "@mipmap/ic_launcher"' in (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+      "modern Android launcher icon property is missing")
+check((ROOT / "docs/releases/v0.1.0.md").is_file(), "first-release notes are missing")
+print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, adaptive desktop layout, remote controls, Android separation, app/window/launcher icons, and v0.1.0 release notes.")
