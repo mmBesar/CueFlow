@@ -23,6 +23,9 @@
 #ifndef CUEFLOW_BUILD_COMMIT
 #define CUEFLOW_BUILD_COMMIT "unknown"
 #endif
+#ifndef CUEFLOW_APP_VERSION
+#define CUEFLOW_APP_VERSION "0.1.0"
+#endif
 
 namespace {
 
@@ -73,7 +76,12 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("CueFlow"));
     QCoreApplication::setOrganizationName(QStringLiteral("mmBesar"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0-dev"));
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+    QGuiApplication::setDesktopFileName(QStringLiteral("cueflow"));
+#endif
+    QCoreApplication::setApplicationVersion(QStringLiteral(CUEFLOW_APP_VERSION));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/CueFlow-icon.svg")));
+    qInfo().noquote() << "CueFlow version:" << QCoreApplication::applicationVersion();
     qInfo().noquote() << "CueFlow build commit:" << CUEFLOW_BUILD_COMMIT;
     QQuickStyle::setStyle(QStringLiteral("Material"));
 

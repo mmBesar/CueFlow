@@ -1,4 +1,4 @@
-QT += core gui network qml quick quickcontrols2 androidextras
+QT += core gui network qml quick quickcontrols2 svg androidextras
 CONFIG += c++17
 TEMPLATE = app
 TARGET = cueflow-legacy
@@ -12,6 +12,9 @@ HEADERS += \
     $$PWD/../src/ScrollModel.h
 
 RESOURCES += $$PWD/qml.qrc
+
+isEmpty(CUEFLOW_APP_VERSION): CUEFLOW_APP_VERSION = 0.1.0
+DEFINES += CUEFLOW_APP_VERSION=\\\"$$CUEFLOW_APP_VERSION\\\"
 
 DEFINES += CUEFLOW_QT5_ANDROID
 isEmpty(CUEFLOW_BUILD_COMMIT): CUEFLOW_BUILD_COMMIT = unknown
@@ -28,7 +31,7 @@ android {
         $$PWD/package-template/build.gradle \
         $$PWD/package-template/res/values/libs.xml
 }
-ANDROID_VERSION_CODE = 102
+ANDROID_VERSION_CODE = 103
 ANDROID_VERSION_NAME = 0.1.0-legacy
 ANDROID_MIN_SDK_VERSION = 21
 ANDROID_TARGET_SDK_VERSION = 28

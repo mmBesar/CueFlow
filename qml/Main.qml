@@ -24,6 +24,8 @@ ApplicationWindow {
     property bool displayTuningExpanded: false
     property bool remoteTuningExpanded: false
     property bool remoteDesktopTuningExpanded: false
+    // Desktop remote editing expands in the page; it never dims or covers the window.
+    property bool remoteDesktopScriptExpanded: false
     // On wide desktop windows, reserve a real inspector column for controls.
     // Narrow windows retain the compact bottom transport bar; Android keeps its
     // separate touch-first layout.
@@ -186,6 +188,16 @@ ApplicationWindow {
             anchors.leftMargin: window.desktopUi ? 12 : 18
             anchors.rightMargin: window.desktopUi ? 12 : 18
             spacing: window.desktopUi ? 8 : 14
+            Image {
+                source: "qrc:/icons/CueFlow-icon.svg"
+                sourceSize.width: 64
+                sourceSize.height: 64
+                Layout.preferredWidth: window.desktopUi ? 26 : 32
+                Layout.preferredHeight: window.desktopUi ? 26 : 32
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+            }
             Label {
                 text: "CueFlow"
                 font.pixelSize: window.desktopUi ? 18 : 22
@@ -218,12 +230,12 @@ ApplicationWindow {
                 }
             }
             Button {
-                text: session.remoteMode && window.desktopUi ? "Edit script" : (session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit"))
+                text: session.remoteMode && window.desktopUi ? (window.remoteDesktopScriptExpanded ? "Hide editor" : "Edit script") : (session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit"))
                 implicitHeight: window.desktopUi ? 32 : 38
                 implicitWidth: window.desktopUi ? (session.remoteMode ? 94 : 56) : 66
                 padding: window.desktopUi ? 4 : 6
                 ToolTip.visible: hovered
-                ToolTip.text: session.remoteMode ? "Edit or send a script" : (window.editingScript ? "Return to reading" : "Edit script")
+                ToolTip.text: session.remoteMode && window.desktopUi ? (window.remoteDesktopScriptExpanded ? "Close the script editor" : "Edit or send a script") : (session.remoteMode ? "Edit or send a script" : (window.editingScript ? "Return to reading" : "Edit script"))
                 contentItem: Item {
                     Row {
                         anchors.centerIn: parent
@@ -252,7 +264,7 @@ ApplicationWindow {
                         Rectangle { x: 2; y: 10; width: 5; height: 2; rotation: 45; color: window.activePalette.text }
                     }
                     Text {
-                        text: session.remoteMode && window.desktopUi ? "Edit script" : (session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit"))
+                        text: session.remoteMode && window.desktopUi ? (window.remoteDesktopScriptExpanded ? "Hide editor" : "Edit script") : (session.remoteMode ? "Edit" : (window.editingScript ? "Back" : "Edit"))
                         color: window.activePalette.text
                         font.pixelSize: window.desktopUi ? 12 : 14
                         verticalAlignment: Text.AlignVCenter
@@ -262,7 +274,18 @@ ApplicationWindow {
                 onClicked: {
                     if (session.remoteMode) {
                         if (window.desktopUi) {
-                            remoteScriptDialog.open()
+                            window.remoteDesktopScriptExpanded = !window.remoteDesktopScriptExpanded
+                            if (window.remoteDesktopScriptExpanded) {
+                                Qt.callLater(function() {
+                                    const editorY = remoteDesktopScriptPanel.mapToItem(desktopRemoteFlick.contentItem, 0, 0).y
+                                    desktopRemoteFlick.contentY = Math.max(0, editorY - 14)
+                                    remoteDesktopScriptEditor.forceActiveFocus()
+                                })
+                            } else {
+                                // Returning to the dashboard should also return the
+                                // page to its predictable top position.
+                                Qt.callLater(function() { desktopRemoteFlick.contentY = 0 })
+                            }
                         } else {
                             remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)
                             Qt.callLater(function() { remoteScriptEditor.forceActiveFocus() })
@@ -1493,8 +1516,8 @@ ApplicationWindow {
         }
 
         // DESKTOP REMOTE MODE -----------------------------------------------
-        // Keep remote actions visible by default. Script editing is an explicit
-        // dialog action, not a giant editor embedded in the control dashboard.
+        // Keep remote actions visible by default. Script editing expands inline
+        // only when requested, without a modal surface covering the dashboard.
         Item {
             id: desktopRemotePage
             Layout.fillWidth: true
@@ -1847,6 +1870,132 @@ ApplicationWindow {
                             font.pixelSize: 10
                             Layout.fillWidth: true
                             elide: Text.ElideRight
+                        }
+                    }
+                }
+
+                // Inline desktop script editor. It participates in the page layout,
+                // uses the active Catppuccin palette, and never adds a modal dimmer.
+                Rectangle {
+                    id: remoteDesktopScriptPanel
+                    visible: window.remoteDesktopScriptExpanded
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 1040
+                    Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                    implicitHeight: remoteDesktopScriptContent.implicitHeight + 24
+                    radius: 12
+                    color: window.activePalette.mantle
+                    border.color: window.activePalette.surface1
+
+                    ColumnLayout {
+                        id: remoteDesktopScriptContent
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 10
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            ColumnLayout {
+                                spacing: 2
+                                Label { text: "Edit script"; color: window.activePalette.text; font.pixelSize: 14; font.weight: Font.DemiBold }
+                                Label {
+                                    text: "Your changes stay as a draft until you send them to the display."
+                                    color: window.activePalette.subtext0
+                                    font.pixelSize: 11
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Button {
+                                text: "Close editor"
+                                implicitHeight: 30
+                                padding: 7
+                                font.pixelSize: 11
+                                onClicked: {
+                                    window.remoteDesktopScriptExpanded = false
+                                    Qt.callLater(function() { desktopRemoteFlick.contentY = 0 })
+                                }
+                            }
+                        }
+
+                        ScrollView {
+                            id: remoteDesktopScriptScroll
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: 180
+                            Layout.preferredHeight: Math.max(180, Math.min(360, desktopRemoteFlick.height * 0.42))
+                            padding: 0
+                            clip: true
+                            background: Rectangle {
+                                radius: 8
+                                color: window.activePalette.base
+                                border.color: remoteDesktopScriptEditor.activeFocus ? window.accentColor : window.activePalette.surface1
+                            }
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            TextArea {
+                                id: remoteDesktopScriptEditor
+                                property bool syncingDraft: false
+                                width: remoteDesktopScriptScroll.availableWidth
+                                text: session.draftScript
+                                color: window.activePalette.text
+                                selectionColor: window.accentColor
+                                selectedTextColor: window.accentTextColor
+                                wrapMode: TextEdit.Wrap
+                                placeholderText: "Write your Markdown script here…"
+                                placeholderTextColor: window.activePalette.overlay1
+                                font.family: "monospace"
+                                font.pixelSize: 14
+                                padding: 0
+                                leftPadding: 14
+                                rightPadding: 14
+                                topPadding: 14
+                                bottomPadding: 12
+                                textMargin: 0
+                                verticalAlignment: TextEdit.AlignTop
+                                clip: true
+                                selectByMouse: true
+                                persistentSelection: true
+                                background: null
+                                onTextChanged: {
+                                    if (!syncingDraft)
+                                        session.setDraftScript(text)
+                                }
+                                Connections {
+                                    target: session
+                                    function onDraftScriptChanged() {
+                                        if (!remoteDesktopScriptEditor.activeFocus && remoteDesktopScriptEditor.text !== session.draftScript) {
+                                            remoteDesktopScriptEditor.syncingDraft = true
+                                            remoteDesktopScriptEditor.text = session.draftScript
+                                            remoteDesktopScriptEditor.syncingDraft = false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Button {
+                                text: "Clear"
+                                implicitHeight: 32
+                                padding: 8
+                                font.pixelSize: 12
+                                onClicked: {
+                                    remoteDesktopScriptEditor.text = ""
+                                    remoteDesktopScriptEditor.forceActiveFocus()
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Button {
+                                text: "Send script to display"
+                                enabled: session.connected
+                                implicitHeight: 32
+                                padding: 9
+                                font.pixelSize: 12
+                                highlighted: true
+                                onClicked: session.sendDraftScript()
+                            }
                         }
                     }
                 }
@@ -2250,109 +2399,6 @@ ApplicationWindow {
     }
 
     Dialog {
-        id: remoteScriptDialog
-        title: "Edit / send script"
-        modal: true
-        focus: true
-        // Keep script editing focused and bounded rather than turning it into
-        // a near-full-window overlay on ordinary desktop displays.
-        width: Math.max(280, Math.min(window.width - 32, 760))
-        height: Math.max(280, Math.min(window.height - 32, 560))
-        anchors.centerIn: parent
-        padding: 14
-        background: Rectangle {
-            radius: 12
-            color: window.activePalette.mantle
-            border.color: window.activePalette.surface1
-        }
-        onOpened: Qt.callLater(function() { remoteDesktopScriptEditor.forceActiveFocus() })
-
-        contentItem: ColumnLayout {
-            spacing: 10
-            Label {
-                text: "Edit a Markdown script and send it to the connected display."
-                color: window.activePalette.subtext1
-                font.pixelSize: 12
-                wrapMode: Text.Wrap
-                Layout.fillWidth: true
-            }
-            ScrollView {
-                id: remoteDesktopScriptScroll
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.minimumHeight: 150
-                padding: 0
-                clip: true
-                background: Rectangle {
-                    radius: 8
-                    color: window.activePalette.base
-                    border.color: remoteDesktopScriptEditor.activeFocus ? window.accentColor : window.activePalette.surface1
-                }
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                TextArea {
-                    id: remoteDesktopScriptEditor
-                    property bool syncingDraft: false
-                    width: remoteDesktopScriptScroll.availableWidth
-                    text: session.draftScript
-                    wrapMode: TextEdit.Wrap
-                    placeholderText: "Write your Markdown script here…"
-                    placeholderTextColor: window.activePalette.overlay1
-                    font.family: "monospace"
-                    font.pixelSize: 14
-                    padding: 0
-                    leftPadding: 16
-                    rightPadding: 16
-                    topPadding: 16
-                    bottomPadding: 12
-                    textMargin: 0
-                    verticalAlignment: TextEdit.AlignTop
-                    clip: true
-                    selectByMouse: true
-                    persistentSelection: true
-                    background: null
-                    onTextChanged: {
-                        if (!syncingDraft)
-                            session.setDraftScript(text)
-                    }
-                    Connections {
-                        target: session
-                        function onDraftScriptChanged() {
-                            if (!remoteDesktopScriptEditor.activeFocus && remoteDesktopScriptEditor.text !== session.draftScript) {
-                                remoteDesktopScriptEditor.syncingDraft = true
-                                remoteDesktopScriptEditor.text = session.draftScript
-                                remoteDesktopScriptEditor.syncingDraft = false
-                            }
-                        }
-                    }
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: "Clear"
-                    implicitHeight: 34
-                    onClicked: {
-                        remoteDesktopScriptEditor.text = ""
-                        remoteDesktopScriptEditor.forceActiveFocus()
-                    }
-                }
-                Item { Layout.fillWidth: true }
-                Button { text: "Cancel"; implicitHeight: 34; onClicked: remoteScriptDialog.close() }
-                Button {
-                    text: "Send script to display"
-                    enabled: session.connected
-                    highlighted: true
-                    implicitHeight: 34
-                    onClicked: {
-                        session.sendDraftScript()
-                        remoteScriptDialog.close()
-                    }
-                }
-            }
-        }
-    }
-
-    Dialog {
         id: appearanceDialog
         title: "Appearance"
         modal: true
@@ -2446,7 +2492,6 @@ ApplicationWindow {
         enabled: Qt.platform.os !== "android"
                  && !window.editingScript
                  && !appearanceDialog.visible
-                 && !remoteScriptDialog.visible
                  && !remoteDesktopScriptEditor.activeFocus
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus
@@ -2466,7 +2511,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: !appearanceDialog.visible && !remoteScriptDialog.visible
+        enabled: !appearanceDialog.visible && !remoteDesktopScriptEditor.activeFocus
         onActivated: {
             if (session.remoteMode && session.viewerFullscreen)
                 session.requestViewerFullscreenToggle()
@@ -2484,7 +2529,6 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !window.editingScript
                  && !appearanceDialog.visible
-                 && !remoteScriptDialog.visible
                  && !remoteDesktopScriptEditor.activeFocus
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus
@@ -2514,7 +2558,6 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !window.editingScript
                  && !appearanceDialog.visible
-                 && !remoteScriptDialog.visible
                  && !remoteDesktopScriptEditor.activeFocus
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus
@@ -2544,7 +2587,6 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !window.editingScript
                  && !appearanceDialog.visible
-                 && !remoteScriptDialog.visible
                  && !remoteDesktopScriptEditor.activeFocus
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus
@@ -2574,7 +2616,6 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !window.editingScript
                  && !appearanceDialog.visible
-                 && !remoteScriptDialog.visible
                  && !remoteDesktopScriptEditor.activeFocus
                  && !remoteScriptEditor.activeFocus
                  && !hostField.activeFocus

@@ -18,7 +18,7 @@ if(BUILD_TESTING)
 endif()
 
 if(CUEFLOW_BUILD_APP)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
@@ -38,7 +38,27 @@ if(CUEFLOW_BUILD_APP)
             qml/Main.qml
     )
 
-    target_compile_definitions(cueflow PRIVATE CUEFLOW_BUILD_COMMIT="${CUEFLOW_BUILD_COMMIT}")
+    qt_add_resources(cueflow cueflow_icon_resources
+        PREFIX "/icons"
+        BASE icon
+        FILES icon/CueFlow-icon.svg
+    )
+
+    target_compile_definitions(cueflow PRIVATE
+        CUEFLOW_BUILD_COMMIT="${CUEFLOW_BUILD_COMMIT}"
+        CUEFLOW_APP_VERSION="${PROJECT_VERSION}"
+    )
+
+    if(ANDROID)
+        # Keep the Qt activity's launcher identity separate from the in-app
+        # window icon. Android 9+ uses density-specific copies of the same mark.
+        set_property(TARGET cueflow PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
+            "${CMAKE_CURRENT_SOURCE_DIR}/packaging/android")
+        set_property(TARGET cueflow PROPERTY QT_ANDROID_APP_ICON "@mipmap/ic_launcher")
+        set_property(TARGET cueflow PROPERTY QT_ANDROID_APP_NAME "CueFlow")
+        set_property(TARGET cueflow PROPERTY QT_ANDROID_VERSION_CODE 100)
+        set_property(TARGET cueflow PROPERTY QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}")
+    endif()
 
     target_link_libraries(cueflow PRIVATE
         Qt6::Core
@@ -47,6 +67,7 @@ if(CUEFLOW_BUILD_APP)
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
+        Qt6::Svg
     )
 
     # Android 16 KB page-size compatibility. Qt 6.12 supports Android 16,
@@ -64,6 +85,8 @@ if(CUEFLOW_BUILD_APP)
     # rule for that Android module: the APK target handles Android packaging.
     if(NOT ANDROID)
         install(TARGETS cueflow RUNTIME DESTINATION bin)
+        install(FILES packaging/linux/cueflow.desktop DESTINATION share/applications)
+        install(FILES icon/CueFlow-icon.svg DESTINATION share/icons/hicolor/scalable/apps RENAME cueflow.svg)
 
         # Generic Linux CI artifacts use a Qt deployment tree. Nix packages
         # should instead use the Qt libraries in the Nix store and disable this

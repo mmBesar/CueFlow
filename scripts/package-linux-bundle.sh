@@ -30,7 +30,7 @@ cp -a "$stage_dir/." "$package_root/"
 install -m 0755 "$repo_root/packaging/linux/AppRun" "$package_root/AppRun"
 install -m 0755 "$repo_root/packaging/linux/install.sh" "$package_root/install.sh"
 install -m 0755 "$repo_root/packaging/linux/uninstall.sh" "$package_root/uninstall.sh"
-install -m 0644 "$repo_root/packaging/linux/cueflow.svg" "$package_root/cueflow.svg"
+install -m 0644 "$repo_root/icon/CueFlow-icon.svg" "$package_root/cueflow.svg"
 install -m 0644 "$repo_root/LICENSE" "$package_root/LICENSE"
 cat > "$package_root/INSTALL.txt" <<INSTALL
 CueFlow $version — Linux $architecture

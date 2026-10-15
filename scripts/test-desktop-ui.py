@@ -97,11 +97,11 @@ required = {
     "remote controls dashboard": 'id: desktopRemoteDashboard',
     "desktop remote playback controls": 'id: desktopPlaybackGroup',
     "desktop fullscreen action": 'session.requestViewerFullscreenToggle()',
-    "desktop remote editor is a separate dialog": 'id: remoteScriptDialog',
-    "remote script dialog width is bounded": 'Math.min(window.width - 32, 760)',
-    "remote script dialog height is bounded": 'Math.min(window.height - 32, 560)',
+    "desktop remote editor is an inline panel": 'id: remoteDesktopScriptPanel',
+    "inline editor visibility has one explicit state": 'visible: window.remoteDesktopScriptExpanded',
     "desktop script editor control": 'id: remoteDesktopScriptEditor',
-    "editor button opens dialog instead of scrolling the remote page": 'remoteScriptDialog.open()',
+    "editor toggles without a modal dialog": 'window.remoteDesktopScriptExpanded = !window.remoteDesktopScriptExpanded',
+    "opening the editor reveals and focuses it": 'remoteDesktopScriptEditor.forceActiveFocus()',
     "mobile remote page remains separate": 'visible: session.remoteMode && !window.desktopUi',
     "Android preserves touch sizing": 'implicitHeight: window.desktopUi ? 34 : 46',
     "soft accent state uses selected Catppuccin accent": 'Qt.rgba(window.accentColor.r, window.accentColor.g, window.accentColor.b, 0.14)',
@@ -134,25 +134,62 @@ check('id: displaySpeedDock' in dock_block and 'id: displayFontSizeDock' in dock
       and 'id: displayWidthDock' in dock_block,
       "the wide inspector must expose the reading adjustments when expanded")
 
-# The always-visible desktop remote dashboard should not contain the editor body.
+# The desktop remote editor belongs to the page layout, but stays collapsed by default.
 remote_start = source.index('id: desktopRemotePage')
 remote_end = source.index('// REMOTE MODE', remote_start)
 remote_block = source[remote_start:remote_end]
-check('TextArea {' not in remote_block and 'ScrollView {' not in remote_block,
-      "desktop remote editor leaked back into the main control page")
+check('id: remoteDesktopScriptPanel' in remote_block and 'TextArea {' in remote_block and 'ScrollView {' in remote_block,
+      "desktop remote editor must be embedded in the remote page, not a modal popup")
+check('remoteScriptDialog' not in source,
+      "the old white/dimming modal remote editor must not return")
+check('color: window.activePalette.mantle' in remote_block and 'color: window.activePalette.base' in remote_block,
+      "inline editor surfaces must use the active Catppuccin palette")
 check('Layout.maximumWidth: 1040' in remote_block,
       "desktop remote dashboard should remain centered and width-bounded")
 check('text: "Keyboard: Space play/pause' in remote_block,
       "desktop remote keyboard help is missing")
 
-# The app icon is intentionally SVG and uses the same muted Catppuccin palette as
-# the application; do not introduce a separate neon PNG asset.
-icon = ROOT / "packaging" / "linux" / "cueflow.svg"
-check(icon.exists(), "Catppuccin SVG application icon is missing")
+# Keep the supplied SVG as the single editable/source asset. Density-specific PNGs
+# are permitted only where Android launchers require them; they are derived copies.
+import struct
+import xml.etree.ElementTree as ET
+
+icon = ROOT / "icon" / "CueFlow-icon.svg"
+check(icon.is_file(), "the canonical icon/CueFlow-icon.svg source is missing")
+try:
+    icon_root = ET.parse(icon).getroot()
+except ET.ParseError as exc:
+    fail(f"the canonical app icon is not valid SVG/XML: {exc}")
 icon_text = icon.read_text(encoding="utf-8")
 check('#24273a' in icon_text and '#c6a0f6' in icon_text,
-      "the application SVG no longer uses CueFlow's muted Catppuccin colors")
-check(not any(p.suffix.lower() == ".png" and "icon" in p.name.lower() for p in ROOT.rglob("*")),
-      "a separate raster app-icon asset was added; keep the SVG icon source")
-
-print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, wide desktop inspector, non-overlapping reading viewport, compact responsive controls, bounded remote editor, and Catppuccin SVG styling.")
+      "the app icon no longer uses CueFlow's muted Catppuccin palette")
+check('source: "qrc:/icons/CueFlow-icon.svg"' in source,
+      "the main UI must load the canonical SVG icon")
+check('QIcon(QStringLiteral(":/icons/CueFlow-icon.svg"))' in (ROOT / "src/main.cpp").read_text(encoding="utf-8"),
+      "the native desktop window must load the canonical SVG icon")
+cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+check('FILES icon/CueFlow-icon.svg' in cmake and 'Qt6::Svg' in cmake,
+      "the canonical SVG must be embedded and Qt SVG support linked")
+for script_name in ("package-appimage.sh", "package-linux-bundle.sh"):
+    package_script = (ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+    check('icon/CueFlow-icon.svg' in package_script,
+          f"{script_name} must package the canonical SVG icon")
+check(not (ROOT / "assets" / "icons").exists(),
+      "obsolete duplicate assets/icons raster source directory must be removed")
+# A legacy SVG may remain on disk for compatibility, but all active app and
+# packaging entry points must reference the requested canonical source instead.
+check('packaging/linux/cueflow.svg' not in cmake,
+      "CMake must not install the obsolete duplicate Linux SVG icon")
+for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):
+    launcher = ROOT / "packaging/android/res" / f"mipmap-{density}" / "ic_launcher.png"
+    check(launcher.is_file(), f"Android {density} launcher derivative is missing")
+    header = launcher.read_bytes()[:24]
+    check(header[:8] == b"\x89PNG\r\n\x1a\n", f"Android {density} launcher is not PNG")
+    dimensions = struct.unpack(">II", header[16:24])
+    check(dimensions == (size, size), f"Android {density} launcher has dimensions {dimensions}, expected {(size, size)}")
+legacy_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+check('icon_root = pathlib.Path("packaging/android/res")' in legacy_ci,
+      "legacy Android build must use launcher derivatives generated from the canonical SVG")
+check('for component in Core Gui Network Qml Quick QuickControls2 Svg' in legacy_ci,
+      "desktop/Android Qt builds must verify the Qt SVG component")
+print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, wide desktop inspector, non-overlapping reading viewport, compact responsive controls, inline themed remote editor, canonical SVG icon, and Android launcher derivatives.")

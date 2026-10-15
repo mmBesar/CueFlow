@@ -44,7 +44,7 @@ mkdir -p "$appdir/usr" "$tools_dir"
 cp -a "$stage_dir/." "$appdir/usr/"
 mkdir -p "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/scalable/apps"
 install -m 0644 "$repo_root/packaging/linux/cueflow.desktop" "$appdir/usr/share/applications/cueflow.desktop"
-install -m 0644 "$repo_root/packaging/linux/cueflow.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/cueflow.svg"
+install -m 0644 "$repo_root/icon/CueFlow-icon.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/cueflow.svg"
 install -m 0644 "$repo_root/LICENSE" "$appdir/usr/LICENSE"
 cat > "$appdir/usr/BUILD-INFO.txt" <<INFO
 application=CueFlow
@@ -129,7 +129,7 @@ rm -f "$appdir/usr/bin/cueflow"
 "$linuxdeploy" --appdir "$appdir" \
     --executable "$stage_dir/bin/cueflow" \
     --desktop-file "$repo_root/packaging/linux/cueflow.desktop" \
-    --icon-file "$repo_root/packaging/linux/cueflow.svg" \
+    --icon-file "$repo_root/icon/CueFlow-icon.svg" \
     --exclude-library 'libEGL*.so*' \
     --exclude-library 'libGL.so*' \
     --exclude-library 'libGLX*.so*' \

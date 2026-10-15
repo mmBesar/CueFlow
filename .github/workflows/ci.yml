@@ -135,6 +135,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
+            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/qt-install.log
 
@@ -150,7 +151,7 @@ jobs:
           fi
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
           test -x "$QT_ROOT_DIR/bin/qt-cmake"
-          for component in Core Gui Network Qml Quick QuickControls2; do
+          for component in Core Gui Network Qml Quick QuickControls2 Svg; do
             test -f "$QT_ROOT_DIR/lib/cmake/Qt6${component}/Qt6${component}Config.cmake" || {
               echo "Missing Qt component: $component" >&2
               find "$QT_ROOT_DIR/lib/cmake" -maxdepth 2 -type f -name 'Qt6*Config.cmake' -printf '%P\n' | sort >&2
@@ -263,6 +264,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
+            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/qt-install.log
 
@@ -278,7 +280,7 @@ jobs:
           fi
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
           test -x "$QT_ROOT_DIR/bin/qt-cmake"
-          for component in Core Gui Network Qml Quick QuickControls2; do
+          for component in Core Gui Network Qml Quick QuickControls2 Svg; do
             test -f "$QT_ROOT_DIR/lib/cmake/Qt6${component}/Qt6${component}Config.cmake" || {
               echo "Missing Qt component: $component" >&2
               find "$QT_ROOT_DIR/lib/cmake" -maxdepth 2 -type f -name 'Qt6*Config.cmake' -printf '%P\n' | sort >&2
@@ -385,7 +387,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
-          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir "$RUNNER_TEMP/Qt"
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --modules qtsvg --outputdir "$RUNNER_TEMP/Qt"
           QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
           test -n "$QT_CONFIG"
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
@@ -463,7 +465,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
-          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 --outputdir "$RUNNER_TEMP/Qt"
+          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 --modules qtsvg --outputdir "$RUNNER_TEMP/Qt"
           QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
           test -n "$QT_CONFIG"
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
@@ -559,6 +561,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop "$QT_ANDROID_VERSION" linux_gcc_64 \
+            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/android-qt-host-install.log
 
@@ -568,6 +571,7 @@ jobs:
           # Qt 6.7+ Android archives are served from the all_os repository.
           # Install host tools separately so QT_HOST_PATH and its Qt modules are explicit.
           python -m aqt install-qt all_os android "$QT_ANDROID_VERSION" android_arm64_v8a \
+            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/android-qt-install.log
 
@@ -586,7 +590,7 @@ jobs:
           ANDROID_QT_ROOT="${ANDROID_QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
           QT_HOST_PATH="${HOST_QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
           test -x "$ANDROID_QT_ROOT/bin/qt-cmake"
-          for component in Core Gui Network Qml Quick QuickControls2; do
+          for component in Core Gui Network Qml Quick QuickControls2 Svg; do
             test -f "$ANDROID_QT_ROOT/lib/cmake/Qt6${component}/Qt6${component}Config.cmake" || {
               echo "Missing Android Qt component: $component" >&2
               find "$ANDROID_QT_ROOT/lib/cmake" -maxdepth 2 -type f -name 'Qt6*Config.cmake' -printf '%P\n' | sort >&2
@@ -749,6 +753,7 @@ jobs:
         run: |
           set -euxo pipefail
           python3 -m aqt install-qt linux android "$QT_LEGACY_VERSION" android \
+            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" 2>&1 | tee diagnostics/qt5-android-install.log
           QT_ROOT_DIR="$RUNNER_TEMP/Qt/$QT_LEGACY_VERSION/android"
           test -x "$QT_ROOT_DIR/bin/qmake"
@@ -818,6 +823,69 @@ jobs:
               raise SystemExit(f"Found {count} applicationId declarations; refusing ambiguous package setup")
           gradle_path.write_text(gradle, encoding="utf-8")
 
+          # Install the CueFlow launcher mark into the Qt 5 template at every
+          # standard density. The manifest points to the matching mipmap entry.
+          # These Android-only density derivatives are generated from
+          # icon/CueFlow-icon.svg and are also used by the modern Android target.
+          icon_root = pathlib.Path("packaging/android/res")
+          icon_sizes = {
+              "mipmap-mdpi": ("mipmap-mdpi", 48),
+              "mipmap-hdpi": ("mipmap-hdpi", 72),
+              "mipmap-xhdpi": ("mipmap-xhdpi", 96),
+              "mipmap-xxhdpi": ("mipmap-xxhdpi", 144),
+              "mipmap-xxxhdpi": ("mipmap-xxxhdpi", 192),
+          }
+          for directory, (source_directory, size) in icon_sizes.items():
+              target_dir = root / "res" / directory
+              target_dir.mkdir(parents=True, exist_ok=True)
+              source_icon = icon_root / source_directory / "ic_launcher.png"
+              if not source_icon.is_file():
+                  raise SystemExit(f"Missing derived Android launcher icon: {source_icon} ({size}px)")
+              (target_dir / "ic_launcher.png").write_bytes(source_icon.read_bytes())
+          drawable_sizes = {
+              "drawable": 48,
+              "drawable-hdpi": 72,
+              "drawable-xhdpi": 96,
+              "drawable-xxhdpi": 144,
+              "drawable-xxxhdpi": 192,
+          }
+          for directory, size in drawable_sizes.items():
+              target_dir = root / "res" / directory
+              target_dir.mkdir(parents=True, exist_ok=True)
+              source_density = {
+                  48: "mipmap-mdpi",
+                  72: "mipmap-hdpi",
+                  96: "mipmap-xhdpi",
+                  144: "mipmap-xxhdpi",
+                  192: "mipmap-xxxhdpi",
+              }[size]
+              source_icon = icon_root / source_density / "ic_launcher.png"
+              if not source_icon.is_file():
+                  raise SystemExit(f"Missing derived Android launcher icon: {source_icon} ({size}px)")
+              (target_dir / "icon.png").write_bytes(source_icon.read_bytes())
+
+          manifest_path = root / "AndroidManifest.xml"
+          manifest = manifest_path.read_text(encoding="utf-8")
+          icon_ref = '@mipmap/ic_launcher'
+          manifest, icon_count = re.subn(
+              r'(<application\b[^>]*?\bandroid:icon\s*=\s*["\'])[^"\']+(["\'])',
+              lambda match: match.group(1) + icon_ref + match.group(2),
+              manifest,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if icon_count == 0:
+              manifest, icon_count = re.subn(
+                  r'(<application\b[^>]*?)(\s*/?>)',
+                  lambda match: match.group(1) + ' android:icon="' + icon_ref + '"' + match.group(2),
+                  manifest,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+          if icon_count != 1:
+              raise SystemExit("Could not configure the Qt 5 manifest launcher icon")
+          manifest_path.write_text(manifest, encoding="utf-8")
+
           # Validate both inputs before qmake/androiddeployqt can silently fall
           # back to the generic org.qtproject.example application ID.
           manifest_check = manifest_path.read_text(encoding="utf-8")
@@ -826,7 +894,11 @@ jobs:
               raise SystemExit("Custom manifest package ID verification failed")
           if not re.search(r'(?m)^\s*applicationId\s+["\']' + re.escape(package) + r'["\']', gradle_check):
               raise SystemExit("Custom Gradle applicationId verification failed")
-          print(f"Prepared Android package identity: {package}")
+          if 'android:icon="@mipmap/ic_launcher"' not in manifest_check:
+              raise SystemExit("Custom manifest launcher icon verification failed")
+          if not (root / "res/mipmap-xxxhdpi/ic_launcher.png").is_file():
+              raise SystemExit("CueFlow launcher icon asset is missing")
+          print(f"Prepared Android package identity and CueFlow launcher icon: {package}")
           PYTHON
           grep -n 'package=' "$template_dest/AndroidManifest.xml"
           grep -n 'applicationId' "$template_dest/build.gradle"
@@ -849,6 +921,7 @@ jobs:
           cd build-android6
           "$QT_LEGACY_ROOT/bin/qmake" "$GITHUB_WORKSPACE/android-legacy/CueFlow.pro" \
             "CUEFLOW_BUILD_COMMIT=$GITHUB_SHA" \
+            "CUEFLOW_APP_VERSION=$(sed -nE 's/^project\(CueFlow VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "$GITHUB_WORKSPACE/CMakeLists.txt" | head -n1)" \
             'ANDROID_ABIS=armeabi-v7a' 2>&1 | tee ../diagnostics/qt5-qmake.log
           settings_file="$(find . -type f -name '*deployment-settings.json' -print -quit)"
           if [[ -z "$settings_file" ]]; then
@@ -1146,6 +1219,21 @@ jobs:
           "$sdk_tools/zipalign" -c -v 4 "$legacy_output"
           rm -f "$keystore"
 
+      - name: Prepare versioned release notes
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          version_notes="docs/releases/v${version}.md"
+          if [[ -f "$version_notes" ]]; then
+            cp "$version_notes" release-assets/RELEASE_NOTES.md
+          else
+            cat > release-assets/RELEASE_NOTES.md <<NOTES
+          # CueFlow ${version}
+
+          See the repository changelog for this version's changes. This draft release is assembled from the matching version tag; review and test all assets before publishing.
+          NOTES
+          fi
+
       - name: Generate checksums and release install notes
         run: |
           set -euo pipefail
@@ -1171,19 +1259,19 @@ jobs:
 
           Verify downloaded files with SHA256SUMS.
           INSTALL
-          sha256sum release-assets/CueFlow-* > release-assets/SHA256SUMS
+          (
+            cd release-assets
+            sha256sum CueFlow-* RELEASE_NOTES.md > SHA256SUMS
+          )
           cat release-assets/SHA256SUMS
 
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           draft: true
-          generate_release_notes: true
+          generate_release_notes: false
           fail_on_unmatched_files: true
-          body: |
-            CueFlow ${{ steps.version.outputs.version }} draft release. Review the generated assets and test them before publishing.
-
-            Linux downloads include standalone AppImages for x86_64 and aarch64, plus .tar.gz archives with a per-user installer. AppImages still depend on a compatible host graphics stack and glibc. Android APKs are signed with the configured release key. The NixOS archive is a separate exported store closure; follow its attached install guide.
+          body_path: release-assets/RELEASE_NOTES.md
           files: |
             release-assets/CueFlow-Linux-x86_64-${{ github.ref_name }}.tar.gz
             release-assets/CueFlow-Linux-aarch64-${{ github.ref_name }}.tar.gz
@@ -1194,4 +1282,5 @@ jobs:
             release-assets/CueFlow-NixOS-x86_64-${{ github.ref_name }}.tar.gz
             release-assets/CueFlow-NixOS-INSTALL-${{ github.ref_name }}.md
             release-assets/CueFlow-INSTALL.txt
+            release-assets/RELEASE_NOTES.md
             release-assets/SHA256SUMS
