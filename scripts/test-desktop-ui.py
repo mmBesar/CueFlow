@@ -188,6 +188,8 @@ for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144)
     dimensions = struct.unpack(">II", header[16:24])
     check(dimensions == (size, size), f"Android {density} launcher has dimensions {dimensions}, expected {(size, size)}")
 legacy_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+check("--modules qtsvg" not in legacy_ci,
+      "qtsvg is not an aqt --modules add-on; keep it in the base Qt installation")
 check('icon_root = pathlib.Path("packaging/android/res")' in legacy_ci,
       "legacy Android build must use launcher derivatives generated from the canonical SVG")
 check('for component in Core Gui Network Qml Quick QuickControls2 Svg' in legacy_ci,

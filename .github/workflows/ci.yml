@@ -135,7 +135,6 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 \
-            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/qt-install.log
 
@@ -264,7 +263,6 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
-            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/qt-install.log
 
@@ -387,7 +385,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
-          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --modules qtsvg --outputdir "$RUNNER_TEMP/Qt"
+          python -m aqt install-qt linux desktop 6.8.3 linux_gcc_64 --outputdir "$RUNNER_TEMP/Qt"
           QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
           test -n "$QT_CONFIG"
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
@@ -465,7 +463,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --disable-pip-version-check 'aqtinstall==3.3.0' 'py7zr==1.1.4'
-          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 --modules qtsvg --outputdir "$RUNNER_TEMP/Qt"
+          python -m aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 --outputdir "$RUNNER_TEMP/Qt"
           QT_CONFIG="$(find "$RUNNER_TEMP/Qt/6.8.3" -type f -path '*/lib/cmake/Qt6/Qt6Config.cmake' -print -quit)"
           test -n "$QT_CONFIG"
           QT_ROOT_DIR="${QT_CONFIG%/lib/cmake/Qt6/Qt6Config.cmake}"
@@ -561,7 +559,6 @@ jobs:
         run: |
           set -euxo pipefail
           python -m aqt install-qt linux desktop "$QT_ANDROID_VERSION" linux_gcc_64 \
-            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/android-qt-host-install.log
 
@@ -571,7 +568,6 @@ jobs:
           # Qt 6.7+ Android archives are served from the all_os repository.
           # Install host tools separately so QT_HOST_PATH and its Qt modules are explicit.
           python -m aqt install-qt all_os android "$QT_ANDROID_VERSION" android_arm64_v8a \
-            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" \
             2>&1 | tee diagnostics/android-qt-install.log
 
@@ -753,7 +749,6 @@ jobs:
         run: |
           set -euxo pipefail
           python3 -m aqt install-qt linux android "$QT_LEGACY_VERSION" android \
-            --modules qtsvg \
             --outputdir "$RUNNER_TEMP/Qt" 2>&1 | tee diagnostics/qt5-android-install.log
           QT_ROOT_DIR="$RUNNER_TEMP/Qt/$QT_LEGACY_VERSION/android"
           test -x "$QT_ROOT_DIR/bin/qmake"
