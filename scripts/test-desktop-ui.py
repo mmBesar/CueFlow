@@ -8,8 +8,8 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-QML = ROOT / "qml" / "Main.qml"
-source = QML.read_text(encoding="utf-8")
+QML_PATH = ROOT / "qml" / "Main.qml"
+source = QML_PATH.read_text(encoding="utf-8")
 
 
 def fail(message: str) -> None:
@@ -22,8 +22,8 @@ def check(condition: bool, message: str) -> None:
         fail(message)
 
 
-# This is a structural check, not a replacement for Qt's qmllint or a GUI run.
-# It catches broken delimiters and common regressions in the desktop panel source.
+# Balanced delimiters, ignoring comments and quoted strings. This is not a QML
+# parser, but it catches common mistakes without requiring a Qt SDK in CI.
 stack: list[tuple[str, int]] = []
 pairs = {")": "(", "]": "[", "}": "{"}
 state = "code"
@@ -83,47 +83,56 @@ duplicates = {name: count for name, count in Counter(ids).items() if count > 1}
 check(not duplicates, f"duplicate QML ids: {duplicates}")
 
 required = {
-    "desktop two-column control deck": 'id: desktopDisplayControls',
-    "playback section": 'text: "PLAYBACK"',
-    "reading adjustments section": 'text: "READING ADJUSTMENTS"',
-    "play/pause text label": 'text: session.playing ? "Pause" : "Play"',
-    "reset text label": 'text: "Reset"',
-    "remote action label": 'text: session.hosting ? "Remote enabled" : "Enable remote"',
-    "text-size control": 'id: displayFontSizeDesktop',
-    "text-width control": 'id: displayWidthDesktop',
-    "desktop/mobile layout separation": 'visible: !window.desktopUi && !window.editingScript',
-    "Android remains touch-sized": 'implicitHeight: window.desktopUi ? 34 : 46',
-    "remote editor collapsed by default": 'property bool remoteEditorExpanded: false',
-    "remote editor only appears on request": 'visible: window.remoteEditorExpanded',
-    "desktop control deck is height-bounded": 'Layout.fillHeight: false',
-    "active remote state uses muted SVG-mauve": 'color: session.hosting ? window.activePalette.mauve : window.activePalette.text',
-    "remote editor remains optional": 'visible: window.remoteEditorExpanded',
-    "remote layout uses content height, not viewport-filling editor": 'height: implicitHeight',
+    "compact desktop display strip": 'id: desktopDisplayControls',
+    "desktop play/pause label": 'text: session.playing ? "Pause" : "Play"',
+    "desktop reset button": 'id: displayResetDesktop',
+    "desktop remote-enable action": 'id: remoteToggleDesktop',
+    "bounded progress slider": 'Layout.maximumWidth: 440',
+    "optional display tuning": 'visible: window.displayTuningExpanded',
+    "desktop-specific remote page": 'id: desktopRemotePage',
+    "remote controls dashboard": 'id: desktopRemoteDashboard',
+    "desktop remote playback controls": 'id: desktopPlaybackGroup',
+    "desktop fullscreen action": 'session.requestViewerFullscreenToggle()',
+    "desktop remote editor is a separate dialog": 'id: remoteScriptDialog',
+    "desktop script editor control": 'id: remoteDesktopScriptEditor',
+    "editor button opens dialog instead of scrolling the remote page": 'remoteScriptDialog.open()',
+    "mobile remote page remains separate": 'visible: session.remoteMode && !window.desktopUi',
+    "Android preserves touch sizing": 'implicitHeight: window.desktopUi ? 34 : 46',
+    "soft accent state uses selected Catppuccin accent": 'Qt.rgba(window.accentColor.r, window.accentColor.g, window.accentColor.b, 0.14)',
 }
 for description, marker in required.items():
     check(marker in source, f"missing {description} ({marker})")
 
-check('columns: window.width >= 1020 ? 2 : 1' in source,
-      "desktop controls no longer adapt between side-by-side and stacked layouts")
-check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 8)' in source,
-      "narrow layouts should reveal the editor only after an explicit Edit action")
-check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)' not in source,
-      "remote toolbar must not automatically jump to the editor when the page is selected")
-check('Layout.fillHeight: true' not in source[source.index('id: desktopDisplayControls'):source.index('id: desktopSessionInfo')],
-      "desktop footer controls must not stretch and cover the reading area")
-check('Layout.fillHeight: remoteContent.wideDesktop' not in source,
-      "remote editor must have a bounded height instead of occupying the full page")
-check('Layout.columnSpan: remoteContent.wideDesktop && !window.remoteEditorExpanded ? 2 : 1' in source,
-      "remote controls should use the available width when the optional editor is closed")
-connected_card_start = source.index('''                    Layout.maximumWidth: window.desktopUi ? (remoteContent.wideDesktop ? (window.remoteEditorExpanded ? 480 : 660) : 680) : 1000000''')
-connected_card_end = source.index('id: remoteControls', connected_card_start)
-connected_card = source[connected_card_start:connected_card_end]
-check(connected_card.count('Layout.preferredWidth:') == 1,
-      "connected remote card must not define preferred width twice")
-check('remoteFlick.contentY = Math.max(0, remoteContent.y + remoteEditorFrame.y - 16)' not in source,
-      "selecting Remote or pressing its toolbar action must not jump to the editor automatically")
-check('session.hosting ? window.activePalette.green' not in source[source.index('id: remoteToggleDesktop'):source.index('id: displaySeekDesktop')],
-      "desktop remote-enabled state must use the muted SVG palette, not a saturated green fill")
-check('elide: Text.ElideNone' in source,
-      "remote button label must not be deliberately elided")
-print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, desktop labels/layout, and Android sizing.")
+# Ensure the permanent display bar itself does not request extra vertical space.
+display_start = source.index('id: desktopDisplayControls')
+display_end = source.index('visible: !window.desktopUi && !window.editingScript', display_start)
+display_block = source[display_start:display_end]
+check('Layout.fillHeight: true' not in display_block,
+      "desktop display controls must not request fill-height and eat reading space")
+check('text: "PLAYBACK"' not in display_block,
+      "old oversized card header should not return")
+check('visible: window.displayTuningExpanded' in display_block,
+      "desktop reading sliders should remain collapsed until requested")
+
+# The always-visible desktop remote dashboard should not contain the editor body.
+remote_start = source.index('id: desktopRemotePage')
+remote_end = source.index('// REMOTE MODE', remote_start)
+remote_block = source[remote_start:remote_end]
+check('TextArea {' not in remote_block and 'ScrollView {' not in remote_block,
+      "desktop remote editor leaked back into the main control page")
+check('Layout.maximumWidth: 1040' in remote_block,
+      "desktop remote dashboard should remain centered and width-bounded")
+check('text: "Keyboard: Space play/pause' in remote_block,
+      "desktop remote keyboard help is missing")
+
+# The app icon is intentionally SVG and uses the same muted Catppuccin palette as
+# the application; do not introduce a separate neon PNG asset.
+icon = ROOT / "packaging" / "linux" / "cueflow.svg"
+check(icon.exists(), "Catppuccin SVG application icon is missing")
+icon_text = icon.read_text(encoding="utf-8")
+check('#24273a' in icon_text and '#c6a0f6' in icon_text,
+      "the application SVG no longer uses CueFlow's muted Catppuccin colors")
+check(not any(p.suffix.lower() == ".png" and "icon" in p.name.lower() for p in ROOT.rglob("*")),
+      "a separate raster app-icon asset was added; keep the SVG icon source")
+
+print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, compact display controls, desktop remote dashboard/editor separation, responsive layout, and Catppuccin SVG styling.")
