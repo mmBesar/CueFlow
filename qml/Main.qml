@@ -24,6 +24,13 @@ ApplicationWindow {
     property bool displayTuningExpanded: false
     property bool remoteTuningExpanded: false
     property bool remoteDesktopTuningExpanded: false
+    // On wide desktop windows, reserve a real inspector column for controls.
+    // Narrow windows retain the compact bottom transport bar; Android keeps its
+    // separate touch-first layout.
+    readonly property bool wideDesktopDisplayDock: desktopUi && width >= 1120
+                                                    && visibility !== Window.FullScreen
+                                                    && !editingScript
+    readonly property int desktopDisplayDockWidth: Math.min(304, Math.max(264, Math.round(width * 0.22)))
     property var flavorNames: ["Latte", "Frappé", "Macchiato", "Mocha"]
     property var accentNames: [
         "Rosewater", "Flamingo", "Pink", "Mauve", "Red", "Maroon",
@@ -335,6 +342,9 @@ ApplicationWindow {
                         Flickable {
                             id: prompterFlick
                             anchors.fill: parent
+                            // The reading surface shrinks beside the desktop inspector;
+                            // controls never float over or steal space from the scene.
+                            anchors.rightMargin: window.wideDesktopDisplayDock ? window.desktopDisplayDockWidth : 0
                             clip: true
                             contentWidth: width
                             contentHeight: scriptFlow.height
@@ -527,9 +537,298 @@ ApplicationWindow {
                             }
                         }
 
+                        // WIDE-DESKTOP DISPLAY INSPECTOR -----------------------------
+                        // This is a sibling of the reading viewport, not an overlay.
+                        // Keeping it in the same display page means the viewport's
+                        // scroll range is recalculated naturally when the dock opens.
+                        Rectangle {
+                            id: desktopDisplayDock
+                            visible: window.wideDesktopDisplayDock
+                            width: window.desktopDisplayDockWidth
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            z: 2
+                            color: window.activePalette.mantle
+                            border.color: window.activePalette.surface1
+                            border.width: 1
+
+                            ScrollView {
+                                id: desktopDisplayDockScroll
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                clip: true
+                                background: null
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                                ColumnLayout {
+                                    width: desktopDisplayDockScroll.availableWidth
+                                    spacing: 12
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        ColumnLayout {
+                                            spacing: 1
+                                            Label {
+                                                text: "DISPLAY"
+                                                color: window.activePalette.subtext0
+                                                font.pixelSize: 10
+                                                font.weight: Font.DemiBold
+                                                font.letterSpacing: 1.1
+                                            }
+                                            Label {
+                                                text: session.playing ? "Playing" : "Paused"
+                                                color: window.activePalette.text
+                                                font.pixelSize: 17
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Rectangle {
+                                            radius: 7
+                                            implicitWidth: displayDockProgress.implicitWidth + 16
+                                            implicitHeight: 24
+                                            color: window.activePalette.surface0
+                                            Label {
+                                                id: displayDockProgress
+                                                anchors.centerIn: parent
+                                                text: Math.round(session.progress * 100) + "%"
+                                                color: window.activePalette.subtext1
+                                                font.pixelSize: 10
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 7
+                                        Button {
+                                            id: displayDockPlayPause
+                                            Layout.fillWidth: true
+                                            implicitHeight: 40
+                                            text: session.playing ? "Pause" : "Play"
+                                            highlighted: true
+                                            onClicked: session.togglePlayback()
+                                        }
+                                        Button {
+                                            id: displayDockReset
+                                            implicitWidth: 68
+                                            implicitHeight: 40
+                                            text: "Reset"
+                                            onClicked: session.resetPlayback()
+                                        }
+                                    }
+
+                                    Button {
+                                        id: displayDockRemoteToggle
+                                        Layout.fillWidth: true
+                                        implicitHeight: 36
+                                        text: session.hosting ? "Remote enabled" : "Enable remote"
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: session.hosting
+                                                      ? "Remote control is active — click to stop it"
+                                                      : "Enable remote control from another device"
+                                        background: Rectangle {
+                                            radius: 7
+                                            color: session.hosting
+                                                   ? Qt.rgba(window.accentColor.r, window.accentColor.g, window.accentColor.b, 0.14)
+                                                   : window.activePalette.surface0
+                                            border.color: session.hosting ? window.accentColor : window.activePalette.surface1
+                                        }
+                                        contentItem: Text {
+                                            text: displayDockRemoteToggle.text
+                                            color: session.hosting ? window.accentColor : window.activePalette.text
+                                            font: displayDockRemoteToggle.font
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: session.hosting ? session.stopHosting() : session.startHosting()
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Label { text: "Position"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                            Item { Layout.fillWidth: true }
+                                            Label { text: Math.round(session.progress * 1000) / 10 + "%"; color: window.activePalette.subtext1; font.pixelSize: 10 }
+                                        }
+                                        Slider {
+                                            id: displaySeekDock
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 24
+                                            from: 0; to: 1; stepSize: 0.0001
+                                            Binding { target: displaySeekDock; property: "value"; value: session.progress; when: !displaySeekDock.pressed }
+                                            onPressedChanged: pressed ? session.beginSeek() : session.endSeek()
+                                            onMoved: session.seekTo(value)
+                                            WheelHandler {
+                                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                                onWheel: function(event) {
+                                                    const direction = window.wheelDirection(event)
+                                                    if (direction !== 0) {
+                                                        session.beginSeek()
+                                                        session.seekTo(Math.max(0, Math.min(1, session.progress + direction * 0.01)))
+                                                        session.endSeek()
+                                                        event.accepted = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: window.activePalette.surface1 }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Label {
+                                            text: "Reading adjustments"
+                                            color: window.activePalette.text
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Button {
+                                            implicitHeight: 30
+                                            padding: 7
+                                            font.pixelSize: 11
+                                            text: window.displayTuningExpanded ? "Hide" : "Tune"
+                                            onClicked: window.displayTuningExpanded = !window.displayTuningExpanded
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        visible: window.displayTuningExpanded
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Label { text: "Speed"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                                Item { Layout.fillWidth: true }
+                                                Label { text: Math.round(session.speed) + " px/s"; color: window.activePalette.subtext0; font.pixelSize: 10 }
+                                            }
+                                            Slider {
+                                                id: displaySpeedDock
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 24
+                                                from: 0; to: 600; stepSize: 1
+                                                Binding { target: displaySpeedDock; property: "value"; value: session.speed; when: !displaySpeedDock.pressed }
+                                                onMoved: session.setSpeed(value)
+                                                WheelHandler {
+                                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                                    onWheel: function(event) {
+                                                        const direction = window.wheelDirection(event)
+                                                        if (direction !== 0) {
+                                                            session.setSpeed(Math.max(0, Math.min(600, session.speed + direction * 10)))
+                                                            event.accepted = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Label { text: "Text size"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                                Item { Layout.fillWidth: true }
+                                                Label { text: session.fontSize + " pt"; color: window.activePalette.subtext0; font.pixelSize: 10 }
+                                            }
+                                            Slider {
+                                                id: displayFontSizeDock
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 24
+                                                from: 12; to: 100; stepSize: 1
+                                                Binding { target: displayFontSizeDock; property: "value"; value: session.fontSize; when: !displayFontSizeDock.pressed }
+                                                onMoved: session.setFontSize(value)
+                                                WheelHandler {
+                                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                                    onWheel: function(event) {
+                                                        const direction = window.wheelDirection(event)
+                                                        if (direction !== 0) {
+                                                            session.setFontSize(Math.max(12, Math.min(100, session.fontSize + direction)))
+                                                            event.accepted = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Label { text: "Text width"; color: window.activePalette.subtext1; font.pixelSize: 11 }
+                                                Item { Layout.fillWidth: true }
+                                                Label { text: session.textWidth + "%"; color: window.activePalette.subtext0; font.pixelSize: 10 }
+                                            }
+                                            Slider {
+                                                id: displayWidthDock
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 24
+                                                from: 35; to: 100; stepSize: 1
+                                                Binding { target: displayWidthDock; property: "value"; value: session.textWidth; when: !displayWidthDock.pressed }
+                                                onMoved: session.setTextWidth(value)
+                                                WheelHandler {
+                                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                                    onWheel: function(event) {
+                                                        const direction = window.wheelDirection(event)
+                                                        if (direction !== 0) {
+                                                            session.setTextWidth(Math.max(35, Math.min(100, session.textWidth + direction)))
+                                                            event.accepted = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: window.activePalette.surface1 }
+
+                                    ColumnLayout {
+                                        visible: session.hosting
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        Label { text: "PAIRING"; color: window.accentColor; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: session.localAddresses.join("  ·  ")
+                                            color: window.activePalette.subtext1
+                                            font.pixelSize: 10
+                                            wrapMode: Text.Wrap
+                                        }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: "Port " + session.port + "   ·   PIN " + session.pin
+                                            color: window.activePalette.text
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+                                    Label {
+                                        visible: !session.hosting && session.status !== "Ready"
+                                        Layout.fillWidth: true
+                                        text: session.status
+                                        color: window.activePalette.subtext0
+                                        font.pixelSize: 10
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+                        }
+
                         Column {
                             id: displayOverlayDock
-                            anchors.right: parent.right
+                            anchors.right: prompterFlick.right
                             anchors.top: parent.top
                             anchors.margins: 8
                             spacing: 6
@@ -734,7 +1033,7 @@ ApplicationWindow {
 
                 Rectangle {
                     id: desktopDisplayControls
-                    visible: window.desktopUi && !window.editingScript
+                    visible: window.desktopUi && !window.wideDesktopDisplayDock && !window.editingScript
                              && (window.visibility !== Window.FullScreen || window.displayControlsVisible)
                     Layout.fillWidth: true
                     implicitHeight: desktopControlsContent.implicitHeight + 16
@@ -1955,8 +2254,10 @@ ApplicationWindow {
         title: "Edit / send script"
         modal: true
         focus: true
-        width: Math.max(280, Math.min(window.width - 24, 900))
-        height: Math.max(280, Math.min(window.height - 24, 680))
+        // Keep script editing focused and bounded rather than turning it into
+        // a near-full-window overlay on ordinary desktop displays.
+        width: Math.max(280, Math.min(window.width - 32, 760))
+        height: Math.max(280, Math.min(window.height - 32, 560))
         anchors.centerIn: parent
         padding: 14
         background: Rectangle {

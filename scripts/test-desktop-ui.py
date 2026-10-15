@@ -84,6 +84,10 @@ check(not duplicates, f"duplicate QML ids: {duplicates}")
 
 required = {
     "compact desktop display strip": 'id: desktopDisplayControls',
+    "wide desktop side inspector": 'id: desktopDisplayDock',
+    "wide desktop inspector breakpoint": 'width >= 1120',
+    "reading canvas reserves inspector width": 'anchors.rightMargin: window.wideDesktopDisplayDock ? window.desktopDisplayDockWidth : 0',
+    "floating controls stay attached to the reading canvas": 'anchors.right: prompterFlick.right',
     "desktop play/pause label": 'text: session.playing ? "Pause" : "Play"',
     "desktop reset button": 'id: displayResetDesktop',
     "desktop remote-enable action": 'id: remoteToggleDesktop',
@@ -94,6 +98,8 @@ required = {
     "desktop remote playback controls": 'id: desktopPlaybackGroup',
     "desktop fullscreen action": 'session.requestViewerFullscreenToggle()',
     "desktop remote editor is a separate dialog": 'id: remoteScriptDialog',
+    "remote script dialog width is bounded": 'Math.min(window.width - 32, 760)',
+    "remote script dialog height is bounded": 'Math.min(window.height - 32, 560)',
     "desktop script editor control": 'id: remoteDesktopScriptEditor',
     "editor button opens dialog instead of scrolling the remote page": 'remoteScriptDialog.open()',
     "mobile remote page remains separate": 'visible: session.remoteMode && !window.desktopUi',
@@ -113,6 +119,20 @@ check('text: "PLAYBACK"' not in display_block,
       "old oversized card header should not return")
 check('visible: window.displayTuningExpanded' in display_block,
       "desktop reading sliders should remain collapsed until requested")
+check('!window.wideDesktopDisplayDock' in display_block,
+      "the compact footer should be hidden when the wide side inspector is active")
+
+dock_start = source.index('id: desktopDisplayDock')
+dock_end = source.index('id: displayOverlayDock', dock_start)
+dock_block = source[dock_start:dock_end]
+check('anchors.top: parent.top' in dock_block and 'anchors.right: parent.right' in dock_block
+      and 'anchors.bottom: parent.bottom' in dock_block,
+      "the wide inspector must occupy its own full-height column")
+check('id: displaySeekDock' in dock_block and 'id: displayDockPlayPause' in dock_block,
+      "the wide inspector must provide independent playback and position controls")
+check('id: displaySpeedDock' in dock_block and 'id: displayFontSizeDock' in dock_block
+      and 'id: displayWidthDock' in dock_block,
+      "the wide inspector must expose the reading adjustments when expanded")
 
 # The always-visible desktop remote dashboard should not contain the editor body.
 remote_start = source.index('id: desktopRemotePage')
@@ -135,4 +155,4 @@ check('#24273a' in icon_text and '#c6a0f6' in icon_text,
 check(not any(p.suffix.lower() == ".png" and "icon" in p.name.lower() for p in ROOT.rglob("*")),
       "a separate raster app-icon asset was added; keep the SVG icon source")
 
-print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, compact display controls, desktop remote dashboard/editor separation, responsive layout, and Catppuccin SVG styling.")
+print(f"[desktop-ui-test] PASS: balanced QML, {len(ids)} unique ids, wide desktop inspector, non-overlapping reading viewport, compact responsive controls, bounded remote editor, and Catppuccin SVG styling.")

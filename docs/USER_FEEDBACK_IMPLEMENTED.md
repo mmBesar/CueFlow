@@ -123,3 +123,11 @@ This was an intermediate layout attempt. Its two-card control deck and sizing de
 - Created a separate desktop remote dashboard with dedicated Playback & Position and Display groups. The connected desktop remote page no longer contains a large always-visible script editor; Edit / send script opens a constrained dialog. The mobile remote page/editor remain separate.
 - Changed active session/remote styling from high-saturation green fills to a soft tint of the chosen Catppuccin accent and kept the muted Catppuccin SVG icon as the packaged app icon.
 - Added structural UI regression coverage for desktop/mobile page separation, compact display controls, dialog-based desktop remote editing, bounded control widths, and the SVG icon palette. These checks do not replace visual confirmation with a Qt runtime.
+
+# Wide desktop inspector pass — 2026-10-15
+
+- Wide desktop Display mode (1120 px and above, outside fullscreen and script editing) now uses a dedicated right-side inspector with playback, reset, remote pairing, position, and optional reading adjustments. The reading `Flickable` is narrower by the inspector's exact width; controls do not overlay the reading scene.
+- The existing compact bottom control strip remains the layout for narrow desktop windows and fullscreen. Android continues using its separate touch-first controls and sizing.
+- The floating fullscreen/controls buttons are anchored to the reading viewport edge instead of the outer window edge, keeping them out of the inspector.
+- The desktop remote script dialog is capped at 760 × 560 px (and shrinks to fit small windows) instead of using a near-full-window 900 × 680 px dialog.
+- Added structural regression checks for the wide inspector, viewport reservation, compact-footer switch-over, and bounded editor dialog. These are source-structure checks; the Qt desktop UI still needs an actual visual smoke test.
